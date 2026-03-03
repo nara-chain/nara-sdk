@@ -24,10 +24,10 @@ export const DEFAULT_QUEST_PROGRAM_ID =
  * Skills Hub program ID
  */
 export const DEFAULT_SKILLS_PROGRAM_ID =
-  process.env.SKILLS_PROGRAM_ID || "54CFypri3UxCawUCLNvFebvpE1qWssKmVfk7RoKzLTkU";
+  process.env.SKILLS_PROGRAM_ID || "SkiLLHUB11111111111111111111111111111111111";
 
 /**
  * ZK ID program ID
  */
 export const DEFAULT_ZKID_PROGRAM_ID =
-  process.env.ZKID_PROGRAM_ID || "Dp4Jb4fmfK1HHVzjMAnWumE5iLuzDsfc4VdRVL7XmY82";
+  process.env.ZKID_PROGRAM_ID || "ZKidentity111111111111111111111111111111111";
