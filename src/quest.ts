@@ -10,7 +10,7 @@ import {
 } from "@solana/web3.js";
 import * as anchor from "@coral-xyz/anchor";
 import { Program, AnchorProvider, Wallet } from "@coral-xyz/anchor";
-import type { NaraQuest } from "./quest/nara_quest_types";
+import type { NaraQuest } from "./idls/nara_quest_types";
 import { DEFAULT_QUEST_PROGRAM_ID } from "./constants";
 
 import { createRequire } from "module";
@@ -162,7 +162,7 @@ function createProgram(
   wallet: Keypair,
   programId?: string
 ): Program<NaraQuest> {
-  const idl = _require("./quest/nara_quest.json");
+  const idl = _require("./idls/nara_quest.json");
   const pid = programId ?? DEFAULT_QUEST_PROGRAM_ID;
   const idlWithPid = { ...idl, address: pid };
   const provider = new AnchorProvider(
