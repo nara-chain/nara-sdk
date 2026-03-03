@@ -8,7 +8,7 @@
 export { NaraSDK, type NaraSDKConfig } from "./src/client";
 
 // Export constants
-export { DEFAULT_RPC_URL, DEFAULT_QUEST_PROGRAM_ID } from "./src/constants";
+export { DEFAULT_RPC_URL, DEFAULT_QUEST_PROGRAM_ID, DEFAULT_SKILLS_PROGRAM_ID } from "./src/constants";
 
 // Export quest functions and types
 export {
@@ -25,6 +25,23 @@ export {
   type SubmitRelayResult,
   type QuestOptions,
 } from "./src/quest";
+
+// Export skills functions and types
+export {
+  registerSkill,
+  getSkillRecord,
+  getSkillInfo,
+  getSkillContent,
+  setDescription,
+  updateMetadata,
+  uploadSkillContent,
+  transferAuthority,
+  closeBuffer,
+  deleteSkill,
+  type SkillRecord,
+  type SkillInfo,
+  type SkillOptions,
+} from "./src/skills";
 
 // Re-export commonly used types from dependencies
 export { PublicKey, Keypair, Transaction } from "@solana/web3.js";

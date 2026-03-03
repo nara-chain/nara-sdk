@@ -1,0 +1,1279 @@
+{
+  "address": "54CFypri3UxCawUCLNvFebvpE1qWssKmVfk7RoKzLTkU",
+  "metadata": {
+    "name": "nara_skills_hub",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Created with Anchor"
+  },
+  "instructions": [
+    {
+      "name": "close_buffer",
+      "discriminator": [
+        46,
+        114,
+        179,
+        58,
+        57,
+        45,
+        194,
+        172
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "skill"
+          ]
+        },
+        {
+          "name": "skill",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  107,
+                  105,
+                  108,
+                  108
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "name"
+              }
+            ]
+          }
+        },
+        {
+          "name": "buffer",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "delete_skill",
+      "discriminator": [
+        17,
+        38,
+        1,
+        212,
+        5,
+        56,
+        231,
+        151
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "skill"
+          ]
+        },
+        {
+          "name": "skill",
+          "docs": [
+            "SkillRecord PDA — closed by Anchor after the handler returns."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  107,
+                  105,
+                  108,
+                  108
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "name"
+              }
+            ]
+          }
+        },
+        {
+          "name": "description",
+          "docs": [
+            "Closed inside the handler if it has been created."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  115,
+                  99
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "skill"
+              }
+            ]
+          }
+        },
+        {
+          "name": "metadata",
+          "docs": [
+            "Closed inside the handler if it has been created."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  116,
+                  97
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "skill"
+              }
+            ]
+          }
+        },
+        {
+          "name": "content_account",
+          "docs": [
+            "Pass any account (e.g. authority) when skill has no content."
+          ],
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "finalize_skill_new",
+      "discriminator": [
+        253,
+        108,
+        88,
+        38,
+        27,
+        56,
+        113,
+        217
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "skill"
+          ]
+        },
+        {
+          "name": "skill",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  107,
+                  105,
+                  108,
+                  108
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "name"
+              }
+            ]
+          }
+        },
+        {
+          "name": "buffer",
+          "writable": true
+        },
+        {
+          "name": "new_content",
+          "docs": [
+            "space = SkillContent::required_size(total_len)).",
+            "This instruction writes the discriminator + header + content bytes."
+          ],
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "finalize_skill_update",
+      "discriminator": [
+        43,
+        248,
+        97,
+        58,
+        212,
+        79,
+        238,
+        179
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "skill"
+          ]
+        },
+        {
+          "name": "skill",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  107,
+                  105,
+                  108,
+                  108
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "name"
+              }
+            ]
+          }
+        },
+        {
+          "name": "buffer",
+          "writable": true
+        },
+        {
+          "name": "new_content",
+          "docs": [
+            "space = SkillContent::required_size(total_len))."
+          ],
+          "writable": true
+        },
+        {
+          "name": "old_content",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "init_buffer",
+      "discriminator": [
+        123,
+        211,
+        233,
+        210,
+        166,
+        139,
+        218,
+        60
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "skill"
+          ]
+        },
+        {
+          "name": "skill",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  107,
+                  105,
+                  108,
+                  108
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "name"
+              }
+            ]
+          }
+        },
+        {
+          "name": "buffer",
+          "docs": [
+            "Pre-created by the client (owner = this program, data all zeros).",
+            "load_init() writes the discriminator + header fields."
+          ],
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "total_len",
+          "type": "u32"
+        }
+      ]
+    },
+    {
+      "name": "init_config",
+      "discriminator": [
+        23,
+        235,
+        115,
+        232,
+        168,
+        96,
+        1,
+        231
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "register_skill",
+      "discriminator": [
+        166,
+        249,
+        255,
+        189,
+        192,
+        197,
+        102,
+        2
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "skill",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  107,
+                  105,
+                  108,
+                  108
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "name"
+              }
+            ]
+          }
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "fee_recipient",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "author",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "set_description",
+      "discriminator": [
+        234,
+        4,
+        121,
+        243,
+        47,
+        60,
+        8,
+        236
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "skill"
+          ]
+        },
+        {
+          "name": "skill",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  107,
+                  105,
+                  108,
+                  108
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "name"
+              }
+            ]
+          }
+        },
+        {
+          "name": "description_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  115,
+                  99
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "skill"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "description",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "transfer_authority",
+      "discriminator": [
+        48,
+        169,
+        76,
+        72,
+        229,
+        180,
+        55,
+        161
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "skill"
+          ]
+        },
+        {
+          "name": "skill",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  107,
+                  105,
+                  108,
+                  108
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "name"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "new_authority",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "update_admin",
+      "discriminator": [
+        161,
+        176,
+        40,
+        213,
+        60,
+        184,
+        179,
+        228
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "new_admin",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "update_fee_recipient",
+      "discriminator": [
+        249,
+        0,
+        198,
+        35,
+        183,
+        123,
+        57,
+        188
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "new_recipient",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "update_metadata",
+      "discriminator": [
+        170,
+        182,
+        43,
+        239,
+        97,
+        78,
+        225,
+        186
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "skill"
+          ]
+        },
+        {
+          "name": "skill",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  107,
+                  105,
+                  108,
+                  108
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "name"
+              }
+            ]
+          }
+        },
+        {
+          "name": "metadata",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  116,
+                  97
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "skill"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "data",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "update_register_fee",
+      "discriminator": [
+        16,
+        11,
+        242,
+        97,
+        55,
+        197,
+        142,
+        249
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "new_fee",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "write_to_buffer",
+      "discriminator": [
+        114,
+        53,
+        121,
+        144,
+        201,
+        97,
+        248,
+        69
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "skill"
+          ]
+        },
+        {
+          "name": "skill",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  107,
+                  105,
+                  108,
+                  108
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "name"
+              }
+            ]
+          }
+        },
+        {
+          "name": "buffer",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "offset",
+          "type": "u32"
+        },
+        {
+          "name": "data",
+          "type": "bytes"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "ProgramConfig",
+      "discriminator": [
+        196,
+        210,
+        90,
+        231,
+        144,
+        149,
+        140,
+        63
+      ]
+    },
+    {
+      "name": "SkillBuffer",
+      "discriminator": [
+        217,
+        98,
+        189,
+        63,
+        233,
+        27,
+        210,
+        167
+      ]
+    },
+    {
+      "name": "SkillDescription",
+      "discriminator": [
+        58,
+        166,
+        16,
+        132,
+        106,
+        56,
+        181,
+        142
+      ]
+    },
+    {
+      "name": "SkillMetadata",
+      "discriminator": [
+        104,
+        219,
+        78,
+        200,
+        70,
+        39,
+        68,
+        145
+      ]
+    },
+    {
+      "name": "SkillRecord",
+      "discriminator": [
+        228,
+        44,
+        57,
+        187,
+        245,
+        201,
+        7,
+        203
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "NameTooShort",
+      "msg": "Name too short: min 5 bytes"
+    },
+    {
+      "code": 6001,
+      "name": "DescriptionTooLong",
+      "msg": "Description too long: max 512 bytes"
+    },
+    {
+      "code": 6002,
+      "name": "Unauthorized",
+      "msg": "Unauthorized"
+    },
+    {
+      "code": 6003,
+      "name": "OffsetMismatch",
+      "msg": "Buffer write offset mismatch: writes must be sequential"
+    },
+    {
+      "code": 6004,
+      "name": "WriteOutOfBounds",
+      "msg": "Write out of bounds"
+    },
+    {
+      "code": 6005,
+      "name": "BufferIncomplete",
+      "msg": "Buffer not fully written"
+    },
+    {
+      "code": 6006,
+      "name": "PendingBufferExists",
+      "msg": "A pending buffer already exists; call close_buffer first"
+    },
+    {
+      "code": 6007,
+      "name": "InvalidBufferSize",
+      "msg": "Buffer account size does not match total_len"
+    },
+    {
+      "code": 6008,
+      "name": "InvalidBufferOwner",
+      "msg": "Buffer account must be owned by this program"
+    },
+    {
+      "code": 6009,
+      "name": "BufferMismatch",
+      "msg": "Buffer account does not match skill.pending_buffer"
+    },
+    {
+      "code": 6010,
+      "name": "InvalidContentOwner",
+      "msg": "Content account must be owned by this program"
+    },
+    {
+      "code": 6011,
+      "name": "InvalidContentSize",
+      "msg": "Content account size does not match buffer total_len"
+    },
+    {
+      "code": 6012,
+      "name": "ContentMismatch",
+      "msg": "old_content account does not match skill.content"
+    },
+    {
+      "code": 6013,
+      "name": "ContentAlreadyExists",
+      "msg": "Skill already has content; use finalize_skill_update instead"
+    },
+    {
+      "code": 6014,
+      "name": "ContentNotFound",
+      "msg": "Skill has no existing content; use finalize_skill_new instead"
+    },
+    {
+      "code": 6015,
+      "name": "HasPendingBuffer",
+      "msg": "Cannot perform this operation while a pending buffer exists"
+    },
+    {
+      "code": 6016,
+      "name": "InvalidFeeRecipient",
+      "msg": "Fee recipient does not match config.fee_recipient"
+    },
+    {
+      "code": 6017,
+      "name": "AuthorTooLong",
+      "msg": "Author name too long: max 64 bytes"
+    },
+    {
+      "code": 6018,
+      "name": "MetadataTooLong",
+      "msg": "Metadata too long: max 800 bytes"
+    }
+  ],
+  "types": [
+    {
+      "name": "ProgramConfig",
+      "docs": [
+        "Global program configuration. Single PDA, seeds = [b\"config\"].",
+        "Created once by the first caller of `init_config`; that caller becomes admin."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "docs": [
+              "Who may call update_admin / update_fee_recipient / update_register_fee."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "register_fee",
+            "docs": [
+              "SOL fee (in lamports) charged on every `register_skill`. 0 = free."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "fee_recipient",
+            "docs": [
+              "Account that receives registration fees. Defaults to admin at init."
+            ],
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SkillBuffer",
+      "docs": [
+        "Client-created zero-copy account (owner = program) used for chunked uploads.",
+        "Fixed header (80 bytes) followed by raw data bytes.",
+        "",
+        "The client calls `system_program::create_account` with",
+        "`space = SkillBuffer::required_size(total_len), owner = program_id`",
+        "then calls `init_buffer`, which uses `load_init()` to write the header.",
+        "Subsequent `write_to_buffer` calls advance `write_offset` sequentially."
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "docs": [
+              "Must match the SkillRecord's authority."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "skill",
+            "docs": [
+              "The SkillRecord PDA this buffer is uploading to."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "total_len",
+            "docs": [
+              "Expected total number of data bytes."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "write_offset",
+            "docs": [
+              "Current write cursor. Each `write_to_buffer` call advances this.",
+              "Client supplies the expected offset; contract rejects mismatches."
+            ],
+            "type": "u32"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SkillDescription",
+      "docs": [
+        "PDA for a skill's short description, seeds = [b\"desc\", skill_record.key()].",
+        "Created / updated via `set_description`. Always allocated at MAX space to",
+        "avoid realloc on subsequent updates."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "description",
+            "docs": [
+              "One-sentence description (max 512 bytes)."
+            ],
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SkillMetadata",
+      "docs": [
+        "PDA for a skill's custom JSON metadata, seeds = [b\"meta\", skill_record.key()].",
+        "Created lazily on first `update_metadata` call; defaults to `{}`.",
+        "Always allocated at MAX space so updates never need realloc."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "data",
+            "docs": [
+              "Arbitrary JSON string (max 800 bytes)."
+            ],
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SkillRecord",
+      "docs": [
+        "PDA metadata account for a skill, seeds = [b\"skill\", name.as_bytes()].",
+        "Stores the authority, a pointer to the content account, and an optional",
+        "pending-buffer pointer. Created by the contract via `register_skill`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "docs": [
+              "Who may update this skill."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "name",
+            "docs": [
+              "Globally unique name (min 5 bytes, max 32 bytes enforced by Solana PDA seed limit)."
+            ],
+            "type": "string"
+          },
+          {
+            "name": "author",
+            "docs": [
+              "Display name of the skill author (max 64 bytes, set freely by the authority)."
+            ],
+            "type": "string"
+          },
+          {
+            "name": "pending_buffer",
+            "docs": [
+              "Active upload buffer, if any. Must be closed before starting a new one."
+            ],
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "content",
+            "docs": [
+              "Current SkillContent account. Pubkey::default() = no content yet."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "version",
+            "docs": [
+              "Content version. 0 = no content yet, set to 1 on first upload,",
+              "incremented by 1 on every subsequent update."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "created_at",
+            "docs": [
+              "Unix timestamp when the skill was first registered."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "updated_at",
+            "docs": [
+              "Unix timestamp of the last content update (0 = no content yet)."
+            ],
+            "type": "i64"
+          }
+        ]
+      }
+    }
+  ]
+}
