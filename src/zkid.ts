@@ -549,3 +549,61 @@ export async function transferZkId(
     .accounts({ payer: payer.publicKey } as any)
     .rpc();
 }
+
+/**
+ * Derive the idCommitment (public) from a Keypair + name.
+ *
+ * The new owner can share this hex string without revealing their idSecret.
+ * Returns a 64-char hex string (32 bytes, big-endian).
+ */
+export async function computeIdCommitment(keypair: Keypair, name: string): Promise<string> {
+  const idSecret = await deriveIdSecret(keypair, name);
+  const commitment = await poseidonHash([idSecret]);
+  return bigIntToBytes32BE(commitment).toString("hex");
+}
+
+/**
+ * Transfer ZK ID ownership using the new owner's idCommitment directly.
+ *
+ * Unlike transferZkId (which takes newIdSecret), this function accepts the
+ * commitment hex produced by computeIdCommitment(), so the new owner never
+ * needs to share their secret.
+ *
+ * @param currentIdSecret  - Current owner's idSecret (from deriveIdSecret)
+ * @param newIdCommitment  - New owner's commitment as bigint (parse from hex)
+ */
+export async function transferZkIdByCommitment(
+  connection: Connection,
+  payer: Keypair,
+  name: string,
+  currentIdSecret: bigint,
+  newIdCommitment: bigint,
+  options?: ZkIdOptions
+): Promise<string> {
+  const program = createProgram(connection, payer, options?.programId);
+  const nameHashBuf = computeNameHash(name);
+
+  const [zkIdPda] = findZkIdPda(nameHashBuf, new PublicKey(options?.programId ?? DEFAULT_ZKID_PROGRAM_ID));
+  const zkId = await program.account.zkIdAccount.fetch(zkIdPda);
+  const currentCommitmentField = bytes32ToBigInt(
+    Buffer.from(zkId.idCommitment as number[])
+  );
+
+  const newCommitmentBuf = bigIntToBytes32BE(newIdCommitment);
+
+  const input = {
+    idSecret: currentIdSecret.toString(),
+    idCommitment: currentCommitmentField.toString(),
+  };
+  const { proof } = await silentProve(input, OWNERSHIP_WASM, OWNERSHIP_ZKEY);
+  const packedProof = packProof(proof);
+
+  return await program.methods
+    .transferZkId(
+      toBytes32(nameHashBuf),
+      toBytes32(newCommitmentBuf),
+      packedProof
+    )
+    .accounts({ payer: payer.publicKey } as any)
+    .rpc();
+}
