@@ -34,10 +34,11 @@ export type NaraQuest = {
               {
                 "kind": "const",
                 "value": [
-                  103,
-                  97,
-                  109,
+                  113,
+                  117,
                   101,
+                  115,
+                  116,
                   95,
                   99,
                   111,
@@ -58,6 +59,12 @@ export type NaraQuest = {
               {
                 "kind": "const",
                 "value": [
+                  113,
+                  117,
+                  101,
+                  115,
+                  116,
+                  95,
                   112,
                   111,
                   111,
@@ -75,6 +82,12 @@ export type NaraQuest = {
               {
                 "kind": "const",
                 "value": [
+                  113,
+                  117,
+                  101,
+                  115,
+                  116,
+                  95,
                   118,
                   97,
                   117,
@@ -116,6 +129,10 @@ export type NaraQuest = {
         {
           "name": "rewardAmount",
           "type": "u64"
+        },
+        {
+          "name": "difficulty",
+          "type": "u32"
         }
       ]
     },
@@ -140,10 +157,11 @@ export type NaraQuest = {
               {
                 "kind": "const",
                 "value": [
-                  103,
-                  97,
-                  109,
+                  113,
+                  117,
                   101,
+                  115,
+                  116,
                   95,
                   99,
                   111,
@@ -164,6 +182,12 @@ export type NaraQuest = {
               {
                 "kind": "const",
                 "value": [
+                  113,
+                  117,
+                  101,
+                  115,
+                  116,
+                  95,
                   112,
                   111,
                   111,
@@ -206,6 +230,12 @@ export type NaraQuest = {
               {
                 "kind": "const",
                 "value": [
+                  113,
+                  117,
+                  101,
+                  115,
+                  116,
+                  95,
                   112,
                   111,
                   111,
@@ -223,6 +253,12 @@ export type NaraQuest = {
               {
                 "kind": "const",
                 "value": [
+                  113,
+                  117,
+                  101,
+                  115,
+                  116,
+                  95,
                   119,
                   105,
                   110,
@@ -246,6 +282,12 @@ export type NaraQuest = {
               {
                 "kind": "const",
                 "value": [
+                  113,
+                  117,
+                  101,
+                  115,
+                  116,
+                  95,
                   118,
                   97,
                   117,
@@ -297,6 +339,14 @@ export type NaraQuest = {
               64
             ]
           }
+        },
+        {
+          "name": "agent",
+          "type": "string"
+        },
+        {
+          "name": "model",
+          "type": "string"
         }
       ]
     },
@@ -321,10 +371,11 @@ export type NaraQuest = {
               {
                 "kind": "const",
                 "value": [
-                  103,
-                  97,
-                  109,
+                  113,
+                  117,
                   101,
+                  115,
+                  116,
                   95,
                   99,
                   111,
@@ -391,6 +442,21 @@ export type NaraQuest = {
       ]
     }
   ],
+  "events": [
+    {
+      "name": "answerSubmitted",
+      "discriminator": [
+        197,
+        84,
+        24,
+        211,
+        90,
+        196,
+        234,
+        120
+      ]
+    }
+  ],
   "errors": [
     {
       "code": 6000,
@@ -440,6 +506,42 @@ export type NaraQuest = {
   ],
   "types": [
     {
+      "name": "answerSubmitted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "round",
+            "type": "u64"
+          },
+          {
+            "name": "questionId",
+            "type": "u64"
+          },
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "rewarded",
+            "type": "bool"
+          },
+          {
+            "name": "rewardLamports",
+            "type": "u64"
+          },
+          {
+            "name": "agent",
+            "type": "string"
+          },
+          {
+            "name": "model",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
       "name": "gameConfig",
       "type": {
         "kind": "struct",
@@ -453,8 +555,13 @@ export type NaraQuest = {
             "type": "u64"
           },
           {
-            "name": "bump",
-            "type": "u8"
+            "name": "padding",
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
           }
         ]
       }
@@ -510,8 +617,17 @@ export type NaraQuest = {
             "type": "bool"
           },
           {
-            "name": "bump",
-            "type": "u8"
+            "name": "difficulty",
+            "type": "u32"
+          },
+          {
+            "name": "padding",
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
           }
         ]
       }
@@ -522,16 +638,21 @@ export type NaraQuest = {
         "kind": "struct",
         "fields": [
           {
-            "name": "bump",
-            "type": "u8"
-          },
-          {
             "name": "round",
             "type": "u64"
           },
           {
             "name": "rewarded",
             "type": "bool"
+          },
+          {
+            "name": "padding",
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
           }
         ]
       }

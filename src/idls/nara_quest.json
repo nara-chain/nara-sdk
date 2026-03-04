@@ -28,10 +28,11 @@
               {
                 "kind": "const",
                 "value": [
-                  103,
-                  97,
-                  109,
+                  113,
+                  117,
                   101,
+                  115,
+                  116,
                   95,
                   99,
                   111,
@@ -52,6 +53,12 @@
               {
                 "kind": "const",
                 "value": [
+                  113,
+                  117,
+                  101,
+                  115,
+                  116,
+                  95,
                   112,
                   111,
                   111,
@@ -69,6 +76,12 @@
               {
                 "kind": "const",
                 "value": [
+                  113,
+                  117,
+                  101,
+                  115,
+                  116,
+                  95,
                   118,
                   97,
                   117,
@@ -110,6 +123,10 @@
         {
           "name": "reward_amount",
           "type": "u64"
+        },
+        {
+          "name": "difficulty",
+          "type": "u32"
         }
       ]
     },
@@ -134,10 +151,11 @@
               {
                 "kind": "const",
                 "value": [
-                  103,
-                  97,
-                  109,
+                  113,
+                  117,
                   101,
+                  115,
+                  116,
                   95,
                   99,
                   111,
@@ -158,6 +176,12 @@
               {
                 "kind": "const",
                 "value": [
+                  113,
+                  117,
+                  101,
+                  115,
+                  116,
+                  95,
                   112,
                   111,
                   111,
@@ -200,6 +224,12 @@
               {
                 "kind": "const",
                 "value": [
+                  113,
+                  117,
+                  101,
+                  115,
+                  116,
+                  95,
                   112,
                   111,
                   111,
@@ -217,6 +247,12 @@
               {
                 "kind": "const",
                 "value": [
+                  113,
+                  117,
+                  101,
+                  115,
+                  116,
+                  95,
                   119,
                   105,
                   110,
@@ -240,6 +276,12 @@
               {
                 "kind": "const",
                 "value": [
+                  113,
+                  117,
+                  101,
+                  115,
+                  116,
+                  95,
                   118,
                   97,
                   117,
@@ -291,6 +333,14 @@
               64
             ]
           }
+        },
+        {
+          "name": "agent",
+          "type": "string"
+        },
+        {
+          "name": "model",
+          "type": "string"
         }
       ]
     },
@@ -315,10 +365,11 @@
               {
                 "kind": "const",
                 "value": [
-                  103,
-                  97,
-                  109,
+                  113,
+                  117,
                   101,
+                  115,
+                  116,
                   95,
                   99,
                   111,
@@ -385,6 +436,21 @@
       ]
     }
   ],
+  "events": [
+    {
+      "name": "AnswerSubmitted",
+      "discriminator": [
+        197,
+        84,
+        24,
+        211,
+        90,
+        196,
+        234,
+        120
+      ]
+    }
+  ],
   "errors": [
     {
       "code": 6000,
@@ -434,6 +500,42 @@
   ],
   "types": [
     {
+      "name": "AnswerSubmitted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "round",
+            "type": "u64"
+          },
+          {
+            "name": "question_id",
+            "type": "u64"
+          },
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "rewarded",
+            "type": "bool"
+          },
+          {
+            "name": "reward_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "agent",
+            "type": "string"
+          },
+          {
+            "name": "model",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
       "name": "GameConfig",
       "type": {
         "kind": "struct",
@@ -447,8 +549,13 @@
             "type": "u64"
           },
           {
-            "name": "bump",
-            "type": "u8"
+            "name": "_padding",
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
           }
         ]
       }
@@ -504,8 +611,17 @@
             "type": "bool"
           },
           {
-            "name": "bump",
-            "type": "u8"
+            "name": "difficulty",
+            "type": "u32"
+          },
+          {
+            "name": "_padding",
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
           }
         ]
       }
@@ -516,16 +632,21 @@
         "kind": "struct",
         "fields": [
           {
-            "name": "bump",
-            "type": "u8"
-          },
-          {
             "name": "round",
             "type": "u64"
           },
           {
             "name": "rewarded",
             "type": "bool"
+          },
+          {
+            "name": "_padding",
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
           }
         ]
       }

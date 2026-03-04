@@ -10,7 +10,7 @@ import {
 } from "@solana/web3.js";
 import * as anchor from "@coral-xyz/anchor";
 import { Program, AnchorProvider, Wallet } from "@coral-xyz/anchor";
-import type { NaraQuest } from "./idls/nara_quest_types";
+import type { NaraQuest } from "./idls/nara_quest";
 import { DEFAULT_QUEST_PROGRAM_ID } from "./constants";
 
 import naraQuestIdl from "./idls/nara_quest.json";
@@ -177,7 +177,7 @@ function createProgram(
 
 function getPoolPda(programId: PublicKey): PublicKey {
   const [pda] = PublicKey.findProgramAddressSync(
-    [Buffer.from("pool")],
+    [Buffer.from("quest_pool")],
     programId
   );
   return pda;
@@ -188,7 +188,7 @@ function getWinnerRecordPda(
   user: PublicKey
 ): PublicKey {
   const [pda] = PublicKey.findProgramAddressSync(
-    [Buffer.from("winner"), user.toBuffer()],
+    [Buffer.from("quest_winner"), user.toBuffer()],
     programId
   );
   return pda;
@@ -291,11 +291,13 @@ export async function submitAnswer(
   connection: Connection,
   wallet: Keypair,
   proof: ZkProof,
+  agent: string = "",
+  model: string = "",
   options?: QuestOptions
 ): Promise<SubmitAnswerResult> {
   const program = createProgram(connection, wallet, options?.programId);
   const signature = await program.methods
-    .submitAnswer(proof.proofA as any, proof.proofB as any, proof.proofC as any)
+    .submitAnswer(proof.proofA as any, proof.proofB as any, proof.proofC as any, agent, model)
     .accounts({ user: wallet.publicKey, payer: wallet.publicKey })
     .signers([wallet])
     .rpc({ skipPreflight: true });
@@ -309,7 +311,9 @@ export async function submitAnswer(
 export async function submitAnswerViaRelay(
   relayUrl: string,
   userPubkey: PublicKey,
-  proof: ZkProofHex
+  proof: ZkProofHex,
+  agent: string = "",
+  model: string = ""
 ): Promise<SubmitRelayResult> {
   const base = relayUrl.replace(/\/+$/, "");
   const res = await fetch(`${base}/submit-answer`, {
@@ -320,6 +324,8 @@ export async function submitAnswerViaRelay(
       proofA: proof.proofA,
       proofB: proof.proofB,
       proofC: proof.proofC,
+      agent,
+      model,
     }),
   });
 
