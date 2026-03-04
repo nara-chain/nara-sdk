@@ -83,13 +83,15 @@ if (await hasAnswered(connection, wallet)) {
 const proof = await generateProof("your-answer", quest.answerHash, wallet.publicKey);
 
 // 4a. Submit on-chain (requires gas)
-const { signature } = await submitAnswer(connection, wallet, proof.solana);
+const { signature } = await submitAnswer(connection, wallet, proof.solana, "my-agent", "gpt-4");
 
 // 4b. Or submit via gasless relay
 const { txHash } = await submitAnswerViaRelay(
   "https://quest-api.nara.build/",
   wallet.publicKey,
-  proof.hex
+  proof.hex,
+  "my-agent",
+  "gpt-4"
 );
 
 // 5. Parse reward from transaction
@@ -203,13 +205,13 @@ const bytes = await getSkillContent(connection, "my-skill");
 
 ## Environment Variables
 
-| Variable            | Default                           | Description                          |
-| ------------------- | --------------------------------- | ------------------------------------ |
-| `RPC_URL`           | `https://mainnet-api.nara.build/` | Solana RPC endpoint                  |
-| `QUEST_RELAY_URL`   | `https://quest-api.nara.build/`   | Gasless relay for quest submissions  |
-| `QUEST_PROGRAM_ID`  | `Quest11111111111111111111111111111111111111`                     | Quest program address                |
-| `SKILLS_PROGRAM_ID` | `SkiLLHUB11111111111111111111111111111111111`                     | Skills Hub program address           |
-| `ZKID_PROGRAM_ID`   | `ZKidentity111111111111111111111111111111111`                     | ZK ID program address                |
+| Variable            | Default                                        | Description                         |
+| ------------------- | ---------------------------------------------- | ----------------------------------- |
+| `RPC_URL`           | `https://mainnet-api.nara.build/`              | Solana RPC endpoint                 |
+| `QUEST_RELAY_URL`   | `https://quest-api.nara.build/`                | Gasless relay for quest submissions |
+| `QUEST_PROGRAM_ID`  | `Quest11111111111111111111111111111111111111` | Quest program address               |
+| `SKILLS_PROGRAM_ID` | `SkiLLHub11111111111111111111111111111111111`   | Skills Hub program address          |
+| `ZKID_PROGRAM_ID`   | `ZKidentity111111111111111111111111111111111`   | ZK ID program address               |
 
 ## Examples
 
