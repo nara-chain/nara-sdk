@@ -44,7 +44,7 @@ async function main() {
   console.log("Wallet:", wallet.publicKey.toBase58());
 
   // Pick a unique name for your ZK ID
-  const name = "alice-demo";
+  const name = `demo-${Math.random().toString(36).slice(2, 10)}`;
 
   // 1. Derive idSecret deterministically from wallet + name
   //    This is the private key to your ZK ID — keep it secret!

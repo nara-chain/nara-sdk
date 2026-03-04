@@ -13,8 +13,7 @@ import { Program, AnchorProvider, Wallet } from "@coral-xyz/anchor";
 import type { NaraQuest } from "./idls/nara_quest_types";
 import { DEFAULT_QUEST_PROGRAM_ID } from "./constants";
 
-import { createRequire } from "module";
-const _require = createRequire(import.meta.url);
+import naraQuestIdl from "./idls/nara_quest.json";
 
 // ─── ZK constants ────────────────────────────────────────────────
 const BN254_FIELD =
@@ -23,7 +22,9 @@ const BN254_FIELD =
 import { fileURLToPath } from "url";
 import { dirname, join, resolve } from "path";
 import { existsSync } from "fs";
-const __dirname = dirname(fileURLToPath(import.meta.url));
+const __dirname: string = import.meta.url
+  ? dirname(fileURLToPath(import.meta.url))
+  : eval("__dirname") as string;
 
 function findZkFile(name: string): string {
   const srcPath = join(__dirname, "zk", name);
@@ -162,7 +163,7 @@ function createProgram(
   wallet: Keypair,
   programId?: string
 ): Program<NaraQuest> {
-  const idl = _require("./idls/nara_quest.json");
+  const idl = naraQuestIdl;
   const pid = programId ?? DEFAULT_QUEST_PROGRAM_ID;
   const idlWithPid = { ...idl, address: pid };
   const provider = new AnchorProvider(

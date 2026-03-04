@@ -13,8 +13,7 @@ import { Program, AnchorProvider, Wallet } from "@coral-xyz/anchor";
 import type { NaraSkillsHub } from "./idls/nara_skills_hub";
 import { DEFAULT_SKILLS_PROGRAM_ID } from "./constants";
 
-import { createRequire } from "module";
-const _require = createRequire(import.meta.url);
+import naraSkillsIdl from "./idls/nara_skills_hub.json";
 
 // ─── Constants ───────────────────────────────────────────────────
 
@@ -26,6 +25,42 @@ const BUFFER_HEADER_SIZE = 80;
 
 /** SkillContent account header size: 8 discriminator + 32 skill */
 const CONTENT_HEADER_SIZE = 40;
+
+// ─── Helpers ─────────────────────────────────────────────────────
+
+/** Send a transaction and poll until confirmed, without using WebSocket. */
+async function sendAndConfirmTx(
+  connection: Connection,
+  tx: anchor.web3.Transaction,
+  signers: anchor.web3.Signer[]
+): Promise<string> {
+  const { blockhash, lastValidBlockHeight } =
+    await connection.getLatestBlockhash("confirmed");
+  tx.recentBlockhash = blockhash;
+  tx.feePayer = signers[0]!.publicKey;
+  tx.sign(...signers);
+
+  const rawTx = tx.serialize();
+  const sig = await connection.sendRawTransaction(rawTx, {
+    skipPreflight: false,
+  });
+
+  while (true) {
+    const { value } = await connection.getSignatureStatuses([sig]);
+    const status = value[0];
+    if (status) {
+      if (status.err) throw new Error(`Transaction failed: ${JSON.stringify(status.err)}`);
+      if (status.confirmationStatus === "confirmed" || status.confirmationStatus === "finalized") {
+        return sig;
+      }
+    }
+    const currentHeight = await connection.getBlockHeight("confirmed");
+    if (currentHeight > lastValidBlockHeight) {
+      throw new Error(`Transaction expired (blockhash no longer valid): ${sig}`);
+    }
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+}
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -68,7 +103,7 @@ function createProgram(
   wallet: Keypair,
   programId?: string
 ): Program<NaraSkillsHub> {
-  const idl = _require("./idls/nara_skills_hub.json");
+  const idl = naraSkillsIdl;
   const pid = programId ?? DEFAULT_SKILLS_PROGRAM_ID;
   const idlWithPid = { ...idl, address: pid };
   const provider = new AnchorProvider(connection, new Wallet(wallet), {
@@ -378,10 +413,7 @@ export async function uploadSkillContent(
       programId: program.programId,
     })
   );
-  await anchor.web3.sendAndConfirmTransaction(connection, createBufferTx, [
-    wallet,
-    bufferKeypair,
-  ]);
+  await sendAndConfirmTx(connection, createBufferTx, [wallet, bufferKeypair]);
 
   // ── Step 2: init_buffer ───────────────────────────────────────
   await program.methods
@@ -426,10 +458,7 @@ export async function uploadSkillContent(
       programId: program.programId,
     })
   );
-  await anchor.web3.sendAndConfirmTransaction(connection, createContentTx, [
-    wallet,
-    contentKeypair,
-  ]);
+  await sendAndConfirmTx(connection, createContentTx, [wallet, contentKeypair]);
 
   // ── Step 5: finalize ──────────────────────────────────────────
   if (isUpdate) {

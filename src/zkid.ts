@@ -18,10 +18,17 @@ import nacl from "tweetnacl";
 import BN from "bn.js";
 import type { NaraZk } from "./idls/nara_zk";
 import { DEFAULT_ZKID_PROGRAM_ID } from "./constants";
+import naraZkIdl from "./idls/nara_zk.json";
 import { createRequire } from "module";
 
-const _require = createRequire(import.meta.url);
-const __dirname = dirname(fileURLToPath(import.meta.url));
+// _require is used only for snarkjs (external, loaded at runtime).
+// Supports both ESM (tsx dev) and esbuild CJS bundle (import.meta.url is "" — falsy)
+const _require: NodeRequire = import.meta.url
+  ? createRequire(import.meta.url)
+  : eval("require") as NodeRequire;
+const __dirname: string = import.meta.url
+  ? dirname(fileURLToPath(import.meta.url))
+  : eval("__dirname") as string;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -174,7 +181,7 @@ function createProgram(
   wallet: Keypair,
   programId?: string
 ): Program<NaraZk> {
-  const idl = _require("./idls/nara_zk.json");
+  const idl = naraZkIdl;
   const pid = programId ?? DEFAULT_ZKID_PROGRAM_ID;
   const idlWithPid = { ...idl, address: pid };
   const provider = new AnchorProvider(connection, new Wallet(wallet), {
@@ -188,7 +195,7 @@ function createReadProgram(
   connection: Connection,
   programId?: string
 ): Program<NaraZk> {
-  const idl = _require("./idls/nara_zk.json");
+  const idl = naraZkIdl;
   const pid = programId ?? DEFAULT_ZKID_PROGRAM_ID;
   const idlWithPid = { ...idl, address: pid };
   const provider = new AnchorProvider(
