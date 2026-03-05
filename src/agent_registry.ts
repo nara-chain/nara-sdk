@@ -309,6 +309,9 @@ export async function registerAgent(
   agentId: string,
   options?: AgentRegistryOptions
 ): Promise<{ signature: string; agentPubkey: PublicKey }> {
+  if (/[A-Z]/.test(agentId)) {
+    throw new Error(`Agent ID must not contain uppercase letters: "${agentId}"`);
+  }
   const program = createProgram(connection, wallet, options?.programId);
   const configPda = getConfigPda(program.programId);
   const config = await program.account.programConfig.fetch(configPda);

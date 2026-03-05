@@ -183,6 +183,9 @@ export async function registerSkill(
   author: string,
   options?: SkillOptions
 ): Promise<{ signature: string; skillPubkey: PublicKey }> {
+  if (/[A-Z]/.test(name)) {
+    throw new Error(`Skill name must not contain uppercase letters: "${name}"`);
+  }
   const program = createProgram(connection, wallet, options?.programId);
   const configPda = getConfigPda(program.programId);
   const config = await program.account.programConfig.fetch(configPda);
