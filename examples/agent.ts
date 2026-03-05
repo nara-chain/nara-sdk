@@ -35,6 +35,11 @@ import {
   PublicKey,
 } from "../index";
 import { Connection } from "@solana/web3.js";
+import * as anchor from "@coral-xyz/anchor";
+import { Program, AnchorProvider, Wallet } from "@coral-xyz/anchor";
+import type { NaraAgentRegistry } from "../src/idls/nara_agent_registry";
+import naraAgentRegistryIdl from "../src/idls/nara_agent_registry.json";
+import { DEFAULT_AGENT_REGISTRY_PROGRAM_ID } from "../src/constants";
 import bs58 from "bs58";
 
 async function main() {
@@ -227,6 +232,83 @@ async function main() {
     "Completed agent registry example successfully"
   );
   console.log("Transaction:", actSig);
+
+  // ── 9b. Log activity with referral ─────────────────────────────
+  console.log("\n--- Logging activity with referral ---");
+
+  // Register a second agent as referral
+  const referralAgentId = `ref-${suffix}`;
+  console.log(`Registering referral agent "${referralAgentId}"...`);
+  try {
+    const { signature } = await registerAgent(connection, wallet, referralAgentId);
+    console.log("Registered, tx:", signature);
+  } catch (err: any) {
+    console.log("Register skipped:", err.message.slice(0, 80));
+  }
+
+  const refActSig = await logActivity(
+    connection,
+    wallet,
+    agentId,
+    "gpt-4",
+    "referral_test",
+    "Testing logActivity with referral agent",
+    undefined,
+    referralAgentId
+  );
+  console.log("Transaction:", refActSig);
+
+  // Verify the ActivityLogged event
+  await new Promise((r) => setTimeout(r, 3000));
+  let txInfo: any = null;
+  for (let i = 0; i < 10; i++) {
+    txInfo = await connection.getTransaction(refActSig, {
+      commitment: "confirmed",
+      maxSupportedTransactionVersion: 0,
+    });
+    if (txInfo) break;
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+
+  if (!txInfo) {
+    console.log("ERROR: Could not fetch transaction");
+  } else if (txInfo.meta?.err) {
+    console.log("ERROR: Transaction failed:", txInfo.meta.err);
+  } else {
+    const logs: string[] = txInfo.meta?.logMessages ?? [];
+    const pid = DEFAULT_AGENT_REGISTRY_PROGRAM_ID;
+    const idl = { ...naraAgentRegistryIdl, address: pid };
+    const provider = new AnchorProvider(
+      connection,
+      new Wallet(Keypair.generate()),
+      { commitment: "confirmed" }
+    );
+    const program = new Program<NaraAgentRegistry>(idl as any, provider);
+    const parser = new anchor.EventParser(program.programId, program.coder);
+    const events: any[] = [];
+    for (const event of parser.parseLogs(logs)) {
+      if (event.name === "activityLogged") {
+        events.push(event.data);
+      }
+    }
+
+    if (events.length === 0) {
+      console.log("WARN: No ActivityLogged events found");
+    } else {
+      const evt = events[0];
+      console.log("  agentId:", evt.agentId);
+      console.log("  activity:", evt.activity);
+      console.log("  referralId:", evt.referralId);
+      console.log("  pointsEarned:", evt.pointsEarned?.toString());
+      console.log("  referralPointsEarned:", evt.referralPointsEarned?.toString());
+
+      // Without quest answer, points should be 0
+      const pts = evt.pointsEarned?.toNumber?.() ?? 0;
+      const refPts = evt.referralPointsEarned?.toNumber?.() ?? 0;
+      console.log(pts === 0 ? "  OK: pointsEarned = 0 (no quest)" : `  UNEXPECTED: pointsEarned = ${pts}`);
+      console.log(refPts === 0 ? "  OK: referralPointsEarned = 0 (no quest)" : `  UNEXPECTED: referralPointsEarned = ${refPts}`);
+    }
+  }
 
   // ── 10. Transfer authority (optional) ─────────────────────────
   // Uncomment and set NEW_AUTHORITY to transfer ownership.

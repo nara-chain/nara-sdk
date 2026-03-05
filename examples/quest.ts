@@ -25,6 +25,22 @@ import {
 } from "../index";
 import { Connection } from "@solana/web3.js";
 import bs58 from "bs58";
+import { readFileSync } from "fs";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+function lookupAnswer(question: string): string | null {
+  try {
+    const data = readFileSync(join(__dirname, "../.assets/test-questions.json"), "utf-8");
+    const questions: { text: string; answer: string }[] = JSON.parse(data);
+    const match = questions.find((q) => q.text === question);
+    return match?.answer ?? null;
+  } catch {
+    return null;
+  }
+}
 
 async function main() {
   const privateKey = process.env.PRIVATE_KEY;
@@ -69,8 +85,18 @@ async function main() {
     return;
   }
 
-  // 3. Solve the question (replace with your answer)
-  const answer = process.env.QUEST_ANSWER ?? "your-answer-here";
+  // 3. Solve the question
+  let answer = process.env.QUEST_ANSWER ?? null;
+  if (!answer) {
+    answer = lookupAnswer(quest.question);
+    if (answer) {
+      console.log(`Auto-solved from test-questions.json: "${answer}"`);
+    }
+  }
+  if (!answer) {
+    console.log("Set QUEST_ANSWER env or ensure .assets/test-questions.json has the answer.");
+    return;
+  }
   console.log(`\n--- Generating ZK proof for answer: "${answer}" ---`);
 
   const proof = await generateProof(

@@ -86,6 +86,8 @@ export interface ActivityLog {
   model: string;
   activity: string;
   log: string;
+  /** Optional referral agent ID for earning referral points */
+  referralAgentId?: string;
 }
 
 // ─── ZK utilities ────────────────────────────────────────────────
@@ -322,7 +324,9 @@ export async function submitAnswer(
       activityLog.agentId,
       activityLog.model,
       activityLog.activity,
-      activityLog.log
+      activityLog.log,
+      undefined,
+      activityLog.referralAgentId
     );
     const tx = new Transaction().add(submitIx).add(logIx);
     tx.feePayer = wallet.publicKey;

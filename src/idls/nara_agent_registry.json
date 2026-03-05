@@ -476,6 +476,7 @@
       "accounts": [
         {
           "name": "authority",
+          "writable": true,
           "signer": true,
           "relations": [
             "agent"
@@ -483,6 +484,7 @@
         },
         {
           "name": "agent",
+          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -501,6 +503,18 @@
               }
             ]
           }
+        },
+        {
+          "name": "referral_agent",
+          "docs": [
+            "Optional referral agent PDA. Pass null if no referral."
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "instructions",
+          "address": "Sysvar1nstructions1111111111111111111111111"
         }
       ],
       "args": [
@@ -1146,6 +1160,21 @@
       "code": 6015,
       "name": "InvalidFeeRecipient",
       "msg": "Fee recipient does not match config.fee_recipient"
+    },
+    {
+      "code": 6016,
+      "name": "AgentIdTooLong",
+      "msg": "Agent ID too long: max 32 bytes"
+    },
+    {
+      "code": 6017,
+      "name": "QuestIxNotFound",
+      "msg": "No valid submit_answer instruction found in transaction"
+    },
+    {
+      "code": 6018,
+      "name": "ReferralNotFound",
+      "msg": "Referral agent not found"
     }
   ],
   "types": [
@@ -1173,6 +1202,18 @@
           {
             "name": "log",
             "type": "string"
+          },
+          {
+            "name": "referral_id",
+            "type": "string"
+          },
+          {
+            "name": "points_earned",
+            "type": "u64"
+          },
+          {
+            "name": "referral_points_earned",
+            "type": "u64"
           },
           {
             "name": "timestamp",
@@ -1214,21 +1255,16 @@
             "type": "i64"
           },
           {
+            "name": "points",
+            "type": "u64"
+          },
+          {
             "name": "version",
             "type": "u32"
           },
           {
             "name": "agent_id_len",
-            "type": "u8"
-          },
-          {
-            "name": "_padding",
-            "type": {
-              "array": [
-                "u8",
-                3
-              ]
-            }
+            "type": "u32"
           },
           {
             "name": "agent_id",

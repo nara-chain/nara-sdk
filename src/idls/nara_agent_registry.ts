@@ -482,6 +482,7 @@ export type NaraAgentRegistry = {
       "accounts": [
         {
           "name": "authority",
+          "writable": true,
           "signer": true,
           "relations": [
             "agent"
@@ -489,6 +490,7 @@ export type NaraAgentRegistry = {
         },
         {
           "name": "agent",
+          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -507,6 +509,18 @@ export type NaraAgentRegistry = {
               }
             ]
           }
+        },
+        {
+          "name": "referralAgent",
+          "docs": [
+            "Optional referral agent PDA. Pass null if no referral."
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "instructions",
+          "address": "Sysvar1nstructions1111111111111111111111111"
         }
       ],
       "args": [
@@ -1152,6 +1166,21 @@ export type NaraAgentRegistry = {
       "code": 6015,
       "name": "invalidFeeRecipient",
       "msg": "Fee recipient does not match config.fee_recipient"
+    },
+    {
+      "code": 6016,
+      "name": "agentIdTooLong",
+      "msg": "Agent ID too long: max 32 bytes"
+    },
+    {
+      "code": 6017,
+      "name": "questIxNotFound",
+      "msg": "No valid submit_answer instruction found in transaction"
+    },
+    {
+      "code": 6018,
+      "name": "referralNotFound",
+      "msg": "Referral agent not found"
     }
   ],
   "types": [
@@ -1179,6 +1208,18 @@ export type NaraAgentRegistry = {
           {
             "name": "log",
             "type": "string"
+          },
+          {
+            "name": "referralId",
+            "type": "string"
+          },
+          {
+            "name": "pointsEarned",
+            "type": "u64"
+          },
+          {
+            "name": "referralPointsEarned",
+            "type": "u64"
           },
           {
             "name": "timestamp",
@@ -1220,21 +1261,16 @@ export type NaraAgentRegistry = {
             "type": "i64"
           },
           {
+            "name": "points",
+            "type": "u64"
+          },
+          {
             "name": "version",
             "type": "u32"
           },
           {
             "name": "agentIdLen",
-            "type": "u8"
-          },
-          {
-            "name": "padding",
-            "type": {
-              "array": [
-                "u8",
-                3
-              ]
-            }
+            "type": "u32"
           },
           {
             "name": "agentId",

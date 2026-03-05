@@ -6,6 +6,7 @@ import {
   Connection,
   Keypair,
   PublicKey,
+  SYSVAR_INSTRUCTIONS_PUBKEY,
   SystemProgram,
   TransactionInstruction,
 } from "@solana/web3.js";
@@ -73,6 +74,8 @@ export interface AgentRecord {
   memory: PublicKey;
   /** 0 = no memory, increments on each upload */
   version: number;
+  /** Accumulated activity points */
+  points: number;
   createdAt: number;
   updatedAt: number;
 }
@@ -146,26 +149,43 @@ function getMetaPda(programId: PublicKey, agentPubkey: PublicKey): PublicKey {
   return pda;
 }
 
-function mapAgentRecord(raw: any): AgentRecord {
-  // agentId is now a fixed [u8; 32] array with agentIdLen prefix (bytemuck)
-  const agentIdLen = raw.agentIdLen as number;
-  const agentIdBytes = raw.agentId as number[];
-  const agentId = Buffer.from(agentIdBytes.slice(0, agentIdLen)).toString("utf-8");
-
-  const pendingBuffer = raw.pendingBuffer as PublicKey;
-  return {
-    authority: raw.authority as PublicKey,
-    agentId,
-    pendingBuffer: pendingBuffer.equals(PublicKey.default) ? null : pendingBuffer,
-    memory: raw.memory as PublicKey,
-    version: raw.version as number,
-    createdAt: (raw.createdAt as anchor.BN).toNumber(),
-    updatedAt: (raw.updatedAt as anchor.BN).toNumber(),
-  };
-}
-
 /** Bio/Metadata header: 8-byte discriminator + 64-byte _reserved */
 const BIO_META_HEADER_SIZE = 72;
+
+/**
+ * Parse AgentRecord from raw account data (bytemuck zero-copy layout).
+ * Layout (after 8-byte discriminator):
+ *   32 authority | 32 pending_buffer | 32 memory |
+ *   8 created_at | 8 updated_at | 8 points |
+ *   4 version | 4 agent_id_len | 32 agent_id | 64 _reserved
+ */
+function parseAgentRecordData(data: Buffer | Uint8Array): AgentRecord {
+  const buf = Buffer.from(data);
+  let offset = 8; // skip discriminator
+
+  const authority = new PublicKey(buf.subarray(offset, offset + 32)); offset += 32;
+  const pendingBuffer = new PublicKey(buf.subarray(offset, offset + 32)); offset += 32;
+  const memory = new PublicKey(buf.subarray(offset, offset + 32)); offset += 32;
+
+  const createdAt = Number(buf.readBigInt64LE(offset)); offset += 8;
+  const updatedAt = Number(buf.readBigInt64LE(offset)); offset += 8;
+  const points = Number(buf.readBigUInt64LE(offset)); offset += 8;
+
+  const version = buf.readUInt32LE(offset); offset += 4;
+  const agentIdLen = buf.readUInt32LE(offset); offset += 4;
+  const agentId = buf.subarray(offset, offset + agentIdLen).toString("utf-8");
+
+  return {
+    authority,
+    agentId,
+    pendingBuffer: pendingBuffer.equals(PublicKey.default) ? null : pendingBuffer,
+    memory,
+    version,
+    points,
+    createdAt,
+    updatedAt,
+  };
+}
 
 /**
  * Deserialize a string from raw bio/metadata account data.
@@ -181,16 +201,20 @@ function deserializeRawString(data: Buffer): string {
 
 /**
  * Fetch an agent's on-chain record.
+ * Uses raw account data parsing because AgentRecord is a bytemuck (zero-copy) account.
  */
 export async function getAgentRecord(
   connection: Connection,
   agentId: string,
   options?: AgentRegistryOptions
 ): Promise<AgentRecord> {
-  const program = createProgram(connection, Keypair.generate(), options?.programId);
-  const agentPda = getAgentPda(program.programId, agentId);
-  const raw = await program.account.agentRecord.fetch(agentPda);
-  return mapAgentRecord(raw);
+  const pid = new PublicKey(options?.programId ?? DEFAULT_AGENT_REGISTRY_PROGRAM_ID);
+  const agentPda = getAgentPda(pid, agentId);
+  const accountInfo = await connection.getAccountInfo(agentPda);
+  if (!accountInfo) {
+    throw new Error(`Agent "${agentId}" not found`);
+  }
+  return parseAgentRecordData(accountInfo.data);
 }
 
 /**
@@ -201,13 +225,16 @@ export async function getAgentInfo(
   agentId: string,
   options?: AgentRegistryOptions
 ): Promise<AgentInfo> {
-  const program = createProgram(connection, Keypair.generate(), options?.programId);
-  const agentPda = getAgentPda(program.programId, agentId);
-  const raw = await program.account.agentRecord.fetch(agentPda);
-  const record = mapAgentRecord(raw);
+  const pid = new PublicKey(options?.programId ?? DEFAULT_AGENT_REGISTRY_PROGRAM_ID);
+  const agentPda = getAgentPda(pid, agentId);
+  const accountInfo = await connection.getAccountInfo(agentPda);
+  if (!accountInfo) {
+    throw new Error(`Agent "${agentId}" not found`);
+  }
+  const record = parseAgentRecordData(accountInfo.data);
 
-  const bioPda = getBioPda(program.programId, agentPda);
-  const metaPda = getMetaPda(program.programId, agentPda);
+  const bioPda = getBioPda(pid, agentPda);
+  const metaPda = getMetaPda(pid, agentPda);
 
   let bio: string | null = null;
   let metadata: string | null = null;
@@ -551,6 +578,9 @@ export async function closeBuffer(
 
 /**
  * Log an activity event for the agent (emits on-chain event).
+ *
+ * @param referralAgentId - Optional referral agent ID. If provided, the referral
+ *                          agent's PDA is passed to earn referral points.
  */
 export async function logActivity(
   connection: Connection,
@@ -559,12 +589,19 @@ export async function logActivity(
   model: string,
   activity: string,
   log: string,
-  options?: AgentRegistryOptions
+  options?: AgentRegistryOptions,
+  referralAgentId?: string
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
   return program.methods
     .logActivity(agentId, model, activity, log)
-    .accounts({ authority: wallet.publicKey } as any)
+    .accounts({
+      authority: wallet.publicKey,
+      instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+      referralAgent: referralAgentId
+        ? getAgentPda(program.programId, referralAgentId)
+        : null,
+    } as any)
     .signers([wallet])
     .rpc();
 }
@@ -572,6 +609,8 @@ export async function logActivity(
 /**
  * Build a logActivity instruction without sending it.
  * Useful for appending to an existing transaction.
+ *
+ * @param referralAgentId - Optional referral agent ID.
  */
 export async function makeLogActivityIx(
   connection: Connection,
@@ -580,12 +619,19 @@ export async function makeLogActivityIx(
   model: string,
   activity: string,
   log: string,
-  options?: AgentRegistryOptions
+  options?: AgentRegistryOptions,
+  referralAgentId?: string
 ): Promise<TransactionInstruction> {
   const program = createProgram(connection, Keypair.generate(), options?.programId);
   return program.methods
     .logActivity(agentId, model, activity, log)
-    .accounts({ authority } as any)
+    .accounts({
+      authority,
+      instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+      referralAgent: referralAgentId
+        ? getAgentPda(program.programId, referralAgentId)
+        : null,
+    } as any)
     .instruction();
 }
 
