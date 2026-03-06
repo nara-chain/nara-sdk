@@ -621,6 +621,30 @@ export async function transferZkIdByCommitment(
  * Initialize the program configuration (one-time setup).
  * The caller becomes the admin.
  */
+/**
+ * Query the ZK ID program config (admin, fee recipient, fee amount).
+ */
+export async function getConfig(
+  connection: Connection,
+  options?: ZkIdOptions
+): Promise<{ admin: PublicKey; feeRecipient: PublicKey; feeAmount: number }> {
+  const programId = new PublicKey(options?.programId ?? DEFAULT_ZKID_PROGRAM_ID);
+  const [configPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("config")],
+    programId
+  );
+  const accountInfo = await connection.getAccountInfo(configPda);
+  if (!accountInfo) {
+    throw new Error("ZK ID config account not found");
+  }
+  const buf = Buffer.from(accountInfo.data);
+  let offset = 8; // skip discriminator
+  const admin = new PublicKey(buf.subarray(offset, offset + 32)); offset += 32;
+  const feeRecipient = new PublicKey(buf.subarray(offset, offset + 32)); offset += 32;
+  const feeAmount = Number(buf.readBigUInt64LE(offset));
+  return { admin, feeRecipient, feeAmount };
+}
+
 export async function initializeConfig(
   connection: Connection,
   wallet: Keypair,

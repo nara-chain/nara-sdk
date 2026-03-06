@@ -511,6 +511,24 @@ export type NaraAgentRegistry = {
           }
         },
         {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
           "name": "referralAgent",
           "docs": [
             "Optional referral agent PDA. Pass null if no referral."
@@ -922,6 +940,57 @@ export type NaraAgentRegistry = {
       ]
     },
     {
+      "name": "updatePointsConfig",
+      "discriminator": [
+        15,
+        89,
+        27,
+        201,
+        127,
+        239,
+        187,
+        80
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "pointsSelf",
+          "type": "u64"
+        },
+        {
+          "name": "pointsReferral",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "updateRegisterFee",
       "discriminator": [
         16,
@@ -1174,11 +1243,16 @@ export type NaraAgentRegistry = {
     },
     {
       "code": 6017,
+      "name": "agentIdNotLowercase",
+      "msg": "Agent ID must be lowercase"
+    },
+    {
+      "code": 6018,
       "name": "questIxNotFound",
       "msg": "No valid submit_answer instruction found in transaction"
     },
     {
-      "code": 6018,
+      "code": 6019,
       "name": "referralNotFound",
       "msg": "Referral agent not found"
     }
@@ -1357,6 +1431,14 @@ export type NaraAgentRegistry = {
           },
           {
             "name": "registerFee",
+            "type": "u64"
+          },
+          {
+            "name": "pointsSelf",
+            "type": "u64"
+          },
+          {
+            "name": "pointsReferral",
             "type": "u64"
           },
           {

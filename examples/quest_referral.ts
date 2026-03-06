@@ -22,6 +22,7 @@ import {
   submitAnswer,
   registerAgent,
   getAgentRecord,
+  getAgentRegistryConfig,
   Keypair,
   PublicKey,
 } from "../index";
@@ -134,7 +135,13 @@ async function main() {
     console.log("Register skipped:", err.message.slice(0, 80));
   }
 
-  // ── 4. Fetch quest and answer with referral ────────────────────
+  // ── 4. Query points config ──────────────────────────────────────
+  console.log("\n--- Points config ---");
+  const config = await getAgentRegistryConfig(connection);
+  console.log(`  Points per activity (self): ${config.pointsSelf}`);
+  console.log(`  Points per referral: ${config.pointsReferral}`);
+
+  // ── 5. Fetch quest and answer with referral ────────────────────
   console.log("\n--- Fetching quest ---");
   const quest = await getQuestInfo(connection, mainWallet);
 

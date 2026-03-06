@@ -265,19 +265,15 @@ export async function getAgentMemory(
   agentId: string,
   options?: AgentRegistryOptions
 ): Promise<Buffer | null> {
-  const program = createProgram(connection, Keypair.generate(), options?.programId);
-  const agentPda = getAgentPda(program.programId, agentId);
-  const raw = await program.account.agentRecord.fetch(agentPda);
-  const memoryPubkey = raw.memory as PublicKey;
-
-  if (memoryPubkey.equals(PublicKey.default)) {
+  const record = await getAgentRecord(connection, agentId, options);
+  if (record.memory.equals(PublicKey.default)) {
     return null;
   }
 
-  const accountInfo = await connection.getAccountInfo(memoryPubkey);
+  const accountInfo = await connection.getAccountInfo(record.memory);
   if (!accountInfo) return null;
 
-  // Memory bytes start after the header (8 discriminator + 32 agent pubkey)
+  // Memory bytes start after the header (8 discriminator + 32 agent pubkey + 64 _reserved)
   return Buffer.from(accountInfo.data.slice(MEMORY_HEADER_SIZE));
 }
 
@@ -287,15 +283,27 @@ export async function getAgentMemory(
 export async function getConfig(
   connection: Connection,
   options?: AgentRegistryOptions
-): Promise<{ admin: PublicKey; registerFee: number; feeRecipient: PublicKey }> {
-  const program = createProgram(connection, Keypair.generate(), options?.programId);
-  const configPda = getConfigPda(program.programId);
-  const config = await program.account.programConfig.fetch(configPda);
-  return {
-    admin: config.admin as PublicKey,
-    registerFee: (config.registerFee as anchor.BN).toNumber(),
-    feeRecipient: config.feeRecipient as PublicKey,
-  };
+): Promise<{
+  admin: PublicKey;
+  registerFee: number;
+  feeRecipient: PublicKey;
+  pointsSelf: number;
+  pointsReferral: number;
+}> {
+  const pid = new PublicKey(options?.programId ?? DEFAULT_AGENT_REGISTRY_PROGRAM_ID);
+  const configPda = getConfigPda(pid);
+  const accountInfo = await connection.getAccountInfo(configPda);
+  if (!accountInfo) {
+    throw new Error("Program config not initialized");
+  }
+  const buf = Buffer.from(accountInfo.data);
+  let offset = 8; // skip discriminator
+  const admin = new PublicKey(buf.subarray(offset, offset + 32)); offset += 32;
+  const feeRecipient = new PublicKey(buf.subarray(offset, offset + 32)); offset += 32;
+  const registerFee = Number(buf.readBigUInt64LE(offset)); offset += 8;
+  const pointsSelf = Number(buf.readBigUInt64LE(offset)); offset += 8;
+  const pointsReferral = Number(buf.readBigUInt64LE(offset));
+  return { admin, registerFee, feeRecipient, pointsSelf, pointsReferral };
 }
 
 // ─── Agent CRUD ─────────────────────────────────────────────────
@@ -358,14 +366,12 @@ export async function deleteAgent(
   options?: AgentRegistryOptions
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
-  const agentPda = getAgentPda(program.programId, agentId);
-  const raw = await program.account.agentRecord.fetch(agentPda);
-  const memoryPubkey = raw.memory as PublicKey;
+  const record = await getAgentRecord(connection, agentId, options);
 
   // When no memory exists, pass authority pubkey as placeholder
-  const memoryAccount = memoryPubkey.equals(PublicKey.default)
+  const memoryAccount = record.memory.equals(PublicKey.default)
     ? wallet.publicKey
-    : memoryPubkey;
+    : record.memory;
 
   return program.methods
     .deleteAgent(agentId)
@@ -441,9 +447,8 @@ export async function uploadMemory(
   const program = createProgram(connection, wallet, options?.programId);
   const chunkSize = options?.chunkSize ?? DEFAULT_CHUNK_SIZE;
   const totalLen = data.length;
-  const agentPda = getAgentPda(program.programId, agentId);
-  const raw = await program.account.agentRecord.fetch(agentPda);
-  const existingMemory = raw.memory as PublicKey;
+  const record = await getAgentRecord(connection, agentId, options);
+  const existingMemory = record.memory;
   const hasMemory = !existingMemory.equals(PublicKey.default);
 
   // Resolve mode
@@ -564,15 +569,13 @@ export async function closeBuffer(
   options?: AgentRegistryOptions
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
-  const agentPda = getAgentPda(program.programId, agentId);
-  const raw = await program.account.agentRecord.fetch(agentPda);
-  const bufferPubkey = raw.pendingBuffer as PublicKey;
-  if (bufferPubkey.equals(PublicKey.default)) {
+  const record = await getAgentRecord(connection, agentId, options);
+  if (!record.pendingBuffer) {
     throw new Error(`Agent "${agentId}" has no pending buffer`);
   }
   return program.methods
     .closeBuffer(agentId)
-    .accounts({ authority: wallet.publicKey, buffer: bufferPubkey } as any)
+    .accounts({ authority: wallet.publicKey, buffer: record.pendingBuffer } as any)
     .signers([wallet])
     .rpc();
 }
@@ -704,6 +707,27 @@ export async function updateRegisterFee(
   const fee = typeof newFee === "number" ? new anchor.BN(newFee) : newFee;
   return program.methods
     .updateRegisterFee(fee)
+    .accounts({ admin: wallet.publicKey } as any)
+    .signers([wallet])
+    .rpc();
+}
+
+/**
+ * Update the points configuration (admin-only).
+ * Sets how many points are awarded per activity and per referral.
+ */
+export async function updatePointsConfig(
+  connection: Connection,
+  wallet: Keypair,
+  pointsSelf: number | anchor.BN,
+  pointsReferral: number | anchor.BN,
+  options?: AgentRegistryOptions
+): Promise<string> {
+  const program = createProgram(connection, wallet, options?.programId);
+  const ps = typeof pointsSelf === "number" ? new anchor.BN(pointsSelf) : pointsSelf;
+  const pr = typeof pointsReferral === "number" ? new anchor.BN(pointsReferral) : pointsReferral;
+  return program.methods
+    .updatePointsConfig(ps, pr)
     .accounts({ admin: wallet.publicKey } as any)
     .signers([wallet])
     .rpc();

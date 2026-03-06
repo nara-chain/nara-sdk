@@ -11,13 +11,15 @@
  * 7. Update memory (replace)
  * 8. Append memory
  * 9. Log activity
- * 10. Transfer authority
- * 11. Delete agent
+ * 9b. Log activity with referral (verify event)
+ * 10. Query config (pointsSelf, pointsReferral)
+ * 11. Transfer authority (optional)
+ * 12. Delete agent (optional)
  *
  * Prerequisites:
  * - Set PRIVATE_KEY environment variable (base58 or JSON array)
  *
- * Run: tsx examples/agent_registry.ts
+ * Run: bun run examples/agent.ts
  */
 
 import {
@@ -25,6 +27,7 @@ import {
   getAgentRecord,
   getAgentInfo,
   getAgentMemory,
+  getAgentRegistryConfig,
   setBio,
   setMetadata,
   uploadMemory,
@@ -310,7 +313,16 @@ async function main() {
     }
   }
 
-  // ── 10. Transfer authority (optional) ─────────────────────────
+  // ── 10. Query config ────────────────────────────────────────────
+  console.log("\n--- Querying program config ---");
+  const config = await getAgentRegistryConfig(connection);
+  console.log("  Admin:", config.admin.toBase58());
+  console.log("  Fee recipient:", config.feeRecipient.toBase58());
+  console.log("  Register fee:", config.registerFee);
+  console.log("  Points per activity (self):", config.pointsSelf);
+  console.log("  Points per referral:", config.pointsReferral);
+
+  // ── 11. Transfer authority (optional) ────────────────────────
   // Uncomment and set NEW_AUTHORITY to transfer ownership.
   // const newAuthority = new PublicKey(process.env.NEW_AUTHORITY!);
   // console.log("\n--- Transferring authority ---");
@@ -322,7 +334,7 @@ async function main() {
   // );
   // console.log("Transaction:", transferSig);
 
-  // ── 11. Delete agent (optional) ───────────────────────────────
+  // ── 12. Delete agent (optional) ───────────────────────────────
   // Uncomment to delete the agent and reclaim all rent.
   // console.log("\n--- Deleting agent ---");
   // const deleteSig = await deleteAgent(connection, wallet, agentId);
