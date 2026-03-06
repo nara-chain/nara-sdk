@@ -102,6 +102,16 @@ export {
   type AgentRegistryOptions,
 } from "./src/agent_registry";
 
+// Export IDLs and types
+export { default as NaraQuestIDL } from "./src/idls/nara_quest.json";
+export { default as NaraSkillsHubIDL } from "./src/idls/nara_skills_hub.json";
+export { default as NaraZkIDL } from "./src/idls/nara_zk.json";
+export { default as NaraAgentRegistryIDL } from "./src/idls/nara_agent_registry.json";
+export type { NaraQuest } from "./src/idls/nara_quest";
+export type { NaraSkillsHub } from "./src/idls/nara_skills_hub";
+export type { NaraZk } from "./src/idls/nara_zk";
+export type { NaraAgentRegistry } from "./src/idls/nara_agent_registry";
+
 // Re-export commonly used types from dependencies
 export { PublicKey, Keypair, Transaction } from "@solana/web3.js";
 export { default as BN } from "bn.js";
