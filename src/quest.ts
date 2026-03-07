@@ -11,6 +11,7 @@ import {
 } from "@solana/web3.js";
 import * as anchor from "@coral-xyz/anchor";
 import { Program, AnchorProvider, Wallet } from "@coral-xyz/anchor";
+import BN from "bn.js";
 import type { NaraQuest } from "./idls/nara_quest";
 import { DEFAULT_QUEST_PROGRAM_ID } from "./constants";
 
@@ -473,8 +474,8 @@ export async function createQuestion(
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
   const answerHash = await computeAnswerHash(answer);
-  const deadline = new anchor.BN(Math.floor(Date.now() / 1000) + deadlineSeconds);
-  const rewardAmount = new anchor.BN(Math.round(rewardSol * LAMPORTS_PER_SOL));
+  const deadline = new BN(Math.floor(Date.now() / 1000) + deadlineSeconds);
+  const rewardAmount = new BN(Math.round(rewardSol * LAMPORTS_PER_SOL));
 
   const signature = await program.methods
     .createQuestion(question, answerHash as any, deadline, rewardAmount, difficulty)
