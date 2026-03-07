@@ -264,11 +264,18 @@ export async function hasAnswered(
 /**
  * Generate a ZK proof for a quest answer.
  * Throws if the answer is wrong (circuit assertion fails).
+ *
+ * @param answer - The answer string (passed directly as circuit input)
+ * @param answerHash - The on-chain answer hash bytes
+ * @param userPubkey - The user's public key (binds proof to user)
+ * @param round - The quest round number (binds proof to round, prevents replay)
+ * @param options - Optional circuit paths
  */
 export async function generateProof(
   answer: string,
   answerHash: number[],
   userPubkey: PublicKey,
+  round: string,
   options?: QuestOptions
 ): Promise<{ solana: ZkProof; hex: ZkProofHex }> {
   const wasmPath = options?.circuitWasmPath ?? process.env.QUEST_CIRCUIT_WASM ?? DEFAULT_CIRCUIT_WASM;
@@ -285,6 +292,7 @@ export async function generateProof(
       answer_hash: answerHashFieldStr,
       pubkey_lo: lo,
       pubkey_hi: hi,
+      round: round,
     },
     wasmPath,
     zkeyPath

@@ -102,7 +102,8 @@ async function main() {
   const proof = await generateProof(
     answer,
     quest.answerHash,
-    wallet.publicKey
+    wallet.publicKey,
+    quest.round
   );
   console.log("Proof generated successfully");
 
