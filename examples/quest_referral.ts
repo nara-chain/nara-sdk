@@ -21,6 +21,7 @@ import {
   generateProof,
   submitAnswer,
   registerAgent,
+  setReferral,
   getAgentRecord,
   getAgentRegistryConfig,
   Keypair,
@@ -135,7 +136,16 @@ async function main() {
     console.log("Register skipped:", err.message.slice(0, 80));
   }
 
-  // ── 4. Query points config ──────────────────────────────────────
+  // ── 4. Set referral relationship ────────────────────────────────
+  console.log(`\n--- Setting referral: ${mainAgentId} -> ${referralAgentId} ---`);
+  try {
+    const sig = await setReferral(connection, mainWallet, mainAgentId, referralAgentId);
+    console.log("Referral set, tx:", sig);
+  } catch (err: any) {
+    console.log("Set referral skipped:", err.message.slice(0, 80));
+  }
+
+  // ── 5. Query points config ──────────────────────────────────────
   console.log("\n--- Points config ---");
   const config = await getAgentRegistryConfig(connection);
   console.log(`  Points per activity (self): ${config.pointsSelf}`);

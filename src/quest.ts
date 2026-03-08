@@ -21,21 +21,17 @@ import naraQuestIdl from "./idls/nara_quest.json";
 const BN254_FIELD =
   21888242871839275222246405745257275088696311157297823662689037894645226208583n;
 
-import { fileURLToPath } from "url";
-import { dirname, join, resolve } from "path";
-import { existsSync } from "fs";
-const __dirname: string = import.meta.url
-  ? dirname(fileURLToPath(import.meta.url))
-  : eval("__dirname") as string;
-
-function findZkFile(name: string): string {
-  const srcPath = join(__dirname, "zk", name);
-  if (existsSync(srcPath)) return srcPath;
-  return srcPath;
+// Lazily resolve default ZK circuit file paths (Node.js only).
+// In browser environments, pass circuitWasmPath/zkeyPath via QuestOptions.
+async function resolveDefaultZkPaths(): Promise<{ wasm: string; zkey: string }> {
+  const { fileURLToPath } = await import("url");
+  const { dirname, join } = await import("path");
+  const dir = dirname(fileURLToPath(import.meta.url));
+  return {
+    wasm: join(dir, "zk", "answer_proof.wasm"),
+    zkey: join(dir, "zk", "answer_proof_final.zkey"),
+  };
 }
-
-const DEFAULT_CIRCUIT_WASM = findZkFile("answer_proof.wasm");
-const DEFAULT_ZKEY = findZkFile("answer_proof_final.zkey");
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -77,8 +73,10 @@ export interface SubmitRelayResult {
 
 export interface QuestOptions {
   programId?: string;
-  circuitWasmPath?: string;
-  zkeyPath?: string;
+  /** File path (Node.js), URL string, or pre-loaded Uint8Array (browser) */
+  circuitWasmPath?: string | Uint8Array;
+  /** File path (Node.js), URL string, or pre-loaded Uint8Array (browser) */
+  zkeyPath?: string | Uint8Array;
 }
 
 export interface ActivityLog {
@@ -90,71 +88,79 @@ export interface ActivityLog {
   referralAgentId?: string;
 }
 
-// ─── ZK utilities ────────────────────────────────────────────────
+// ─── ZK utilities (browser-compatible, no Buffer) ───────────────
 
-function toBigEndian32(v: bigint): Buffer {
-  return Buffer.from(v.toString(16).padStart(64, "0"), "hex");
+function hexFromBytes(bytes: Uint8Array): string {
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function concatBytes(...arrays: Uint8Array[]): Uint8Array {
+  const total = arrays.reduce((sum, a) => sum + a.length, 0);
+  const result = new Uint8Array(total);
+  let offset = 0;
+  for (const a of arrays) { result.set(a, offset); offset += a.length; }
+  return result;
+}
+
+function bigintToBytes32(v: bigint): Uint8Array {
+  const hex = v.toString(16).padStart(64, "0");
+  const bytes = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  return bytes;
 }
 
 function answerToField(answer: string): bigint {
-  return (
-    BigInt("0x" + Buffer.from(answer, "utf-8").toString("hex")) % BN254_FIELD
-  );
+  const encoded = new TextEncoder().encode(answer);
+  return BigInt("0x" + hexFromBytes(encoded)) % BN254_FIELD;
 }
 
 function hashBytesToFieldStr(hashBytes: number[]): string {
-  return BigInt("0x" + Buffer.from(hashBytes).toString("hex")).toString();
+  return BigInt("0x" + hexFromBytes(new Uint8Array(hashBytes))).toString();
 }
 
 function pubkeyToCircuitInputs(pubkey: PublicKey): {
   lo: string;
   hi: string;
 } {
-  const bytes = pubkey.toBuffer();
+  const bytes = pubkey.toBytes();
   return {
-    lo: BigInt("0x" + bytes.subarray(16, 32).toString("hex")).toString(),
-    hi: BigInt("0x" + bytes.subarray(0, 16).toString("hex")).toString(),
+    lo: BigInt("0x" + hexFromBytes(bytes.slice(16, 32))).toString(),
+    hi: BigInt("0x" + hexFromBytes(bytes.slice(0, 16))).toString(),
   };
 }
 
 function proofToSolana(proof: any): ZkProof {
-  const negY = (y: string) => toBigEndian32(BN254_FIELD - BigInt(y));
-  const be = (s: string) => toBigEndian32(BigInt(s));
+  const negY = (y: string) => bigintToBytes32(BN254_FIELD - BigInt(y));
+  const be = (s: string) => bigintToBytes32(BigInt(s));
   return {
-    proofA: Array.from(
-      Buffer.concat([be(proof.pi_a[0]), negY(proof.pi_a[1])])
-    ),
-    proofB: Array.from(
-      Buffer.concat([
-        be(proof.pi_b[0][1]),
-        be(proof.pi_b[0][0]),
-        be(proof.pi_b[1][1]),
-        be(proof.pi_b[1][0]),
-      ])
-    ),
-    proofC: Array.from(
-      Buffer.concat([be(proof.pi_c[0]), be(proof.pi_c[1])])
-    ),
-  };
-}
-
-function proofToHex(proof: any): ZkProofHex {
-  const negY = (y: string) => toBigEndian32(BN254_FIELD - BigInt(y));
-  const be = (s: string) => toBigEndian32(BigInt(s));
-  return {
-    proofA: Buffer.concat([be(proof.pi_a[0]), negY(proof.pi_a[1])]).toString("hex"),
-    proofB: Buffer.concat([
+    proofA: Array.from(concatBytes(be(proof.pi_a[0]), negY(proof.pi_a[1]))),
+    proofB: Array.from(concatBytes(
       be(proof.pi_b[0][1]),
       be(proof.pi_b[0][0]),
       be(proof.pi_b[1][1]),
       be(proof.pi_b[1][0]),
-    ]).toString("hex"),
-    proofC: Buffer.concat([be(proof.pi_c[0]), be(proof.pi_c[1])]).toString("hex"),
+    )),
+    proofC: Array.from(concatBytes(be(proof.pi_c[0]), be(proof.pi_c[1]))),
+  };
+}
+
+function proofToHex(proof: any): ZkProofHex {
+  const negY = (y: string) => bigintToBytes32(BN254_FIELD - BigInt(y));
+  const be = (s: string) => bigintToBytes32(BigInt(s));
+  return {
+    proofA: hexFromBytes(concatBytes(be(proof.pi_a[0]), negY(proof.pi_a[1]))),
+    proofB: hexFromBytes(concatBytes(
+      be(proof.pi_b[0][1]),
+      be(proof.pi_b[0][0]),
+      be(proof.pi_b[1][1]),
+      be(proof.pi_b[1][0]),
+    )),
+    proofC: hexFromBytes(concatBytes(be(proof.pi_c[0]), be(proof.pi_c[1]))),
   };
 }
 
 // Suppress console output from snarkjs WASM during proof generation.
-async function silentProve(snarkjs: any, input: Record<string, string>, wasmPath: string, zkeyPath: string) {
+async function silentProve(snarkjs: any, input: Record<string, string>, wasmPath: string | Uint8Array, zkeyPath: string | Uint8Array) {
   const savedLog = console.log;
   const savedError = console.error;
   console.log = () => {};
@@ -188,7 +194,7 @@ function createProgram(
 
 function getPoolPda(programId: PublicKey): PublicKey {
   const [pda] = PublicKey.findProgramAddressSync(
-    [Buffer.from("quest_pool")],
+    [new TextEncoder().encode("quest_pool")],
     programId
   );
   return pda;
@@ -199,7 +205,7 @@ function getWinnerRecordPda(
   user: PublicKey
 ): PublicKey {
   const [pda] = PublicKey.findProgramAddressSync(
-    [Buffer.from("quest_winner"), user.toBuffer()],
+    [new TextEncoder().encode("quest_winner"), user.toBytes()],
     programId
   );
   return pda;
@@ -279,8 +285,13 @@ export async function generateProof(
   round: string,
   options?: QuestOptions
 ): Promise<{ solana: ZkProof; hex: ZkProofHex }> {
-  const wasmPath = options?.circuitWasmPath ?? process.env.QUEST_CIRCUIT_WASM ?? DEFAULT_CIRCUIT_WASM;
-  const zkeyPath = options?.zkeyPath ?? process.env.QUEST_ZKEY ?? DEFAULT_ZKEY;
+  let wasmSource = options?.circuitWasmPath;
+  let zkeySource = options?.zkeyPath;
+  if (!wasmSource || !zkeySource) {
+    const defaults = await resolveDefaultZkPaths();
+    wasmSource ??= defaults.wasm;
+    zkeySource ??= defaults.zkey;
+  }
 
   const snarkjs = await import("snarkjs");
   const answerHashFieldStr = hashBytesToFieldStr(answerHash);
@@ -295,8 +306,8 @@ export async function generateProof(
       pubkey_hi: hi,
       round: round,
     },
-    wasmPath,
-    zkeyPath
+    wasmSource,
+    zkeySource
   );
 
   return {
@@ -455,7 +466,7 @@ export async function computeAnswerHash(answer: string): Promise<number[]> {
   const fieldVal = answerToField(answer);
   const hashRaw = poseidon([fieldVal]);
   const hashStr: string = poseidon.F.toString(hashRaw);
-  return Array.from(toBigEndian32(BigInt(hashStr)));
+  return Array.from(bigintToBytes32(BigInt(hashStr)));
 }
 
 /**

@@ -7,9 +7,6 @@
  * - Ownership can be transferred via ZK proof without revealing the owner's wallet
  */
 
-import { createHash } from "crypto";
-import { fileURLToPath } from "url";
-import { dirname, join } from "path";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 import * as anchor from "@coral-xyz/anchor";
 import { Program, AnchorProvider, Wallet } from "@coral-xyz/anchor";
@@ -19,16 +16,6 @@ import BN from "bn.js";
 import type { NaraZk } from "./idls/nara_zk";
 import { DEFAULT_ZKID_PROGRAM_ID } from "./constants";
 import naraZkIdl from "./idls/nara_zk.json";
-import { createRequire } from "module";
-
-// _require is used only for snarkjs (external, loaded at runtime).
-// Supports both ESM (tsx dev) and esbuild CJS bundle (import.meta.url is "" — falsy)
-const _require: NodeRequire = import.meta.url
-  ? createRequire(import.meta.url)
-  : eval("require") as NodeRequire;
-const __dirname: string = import.meta.url
-  ? dirname(fileURLToPath(import.meta.url))
-  : eval("__dirname") as string;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -36,10 +23,22 @@ const BN254_PRIME =
   21888242871839275222246405745257275088696311157297823662689037894645226208583n;
 const MERKLE_LEVELS = 64;
 
-const WITHDRAW_WASM = join(__dirname, "zk", "withdraw.wasm");
-const WITHDRAW_ZKEY = join(__dirname, "zk", "withdraw_final.zkey");
-const OWNERSHIP_WASM = join(__dirname, "zk", "ownership.wasm");
-const OWNERSHIP_ZKEY = join(__dirname, "zk", "ownership_final.zkey");
+// Lazily resolve default ZK circuit file paths (Node.js only).
+// In browser environments, pass withdrawWasm/withdrawZkey/ownershipWasm/ownershipZkey via ZkIdOptions.
+async function resolveDefaultZkPaths(): Promise<{
+  withdrawWasm: string; withdrawZkey: string;
+  ownershipWasm: string; ownershipZkey: string;
+}> {
+  const { fileURLToPath } = await import("url");
+  const { dirname, join } = await import("path");
+  const dir = dirname(fileURLToPath(import.meta.url));
+  return {
+    withdrawWasm: join(dir, "zk", "withdraw.wasm"),
+    withdrawZkey: join(dir, "zk", "withdraw_final.zkey"),
+    ownershipWasm: join(dir, "zk", "ownership.wasm"),
+    ownershipZkey: join(dir, "zk", "ownership_final.zkey"),
+  };
+}
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -69,9 +68,36 @@ export interface ClaimableDeposit {
 
 export interface ZkIdOptions {
   programId?: string;
+  /** File path (Node.js), URL string, or pre-loaded Uint8Array (browser) */
+  withdrawWasm?: string | Uint8Array;
+  /** File path (Node.js), URL string, or pre-loaded Uint8Array (browser) */
+  withdrawZkey?: string | Uint8Array;
+  /** File path (Node.js), URL string, or pre-loaded Uint8Array (browser) */
+  ownershipWasm?: string | Uint8Array;
+  /** File path (Node.js), URL string, or pre-loaded Uint8Array (browser) */
+  ownershipZkey?: string | Uint8Array;
 }
 
-// ─── Internal crypto helpers ─────────────────────────────────────────────────
+// ─── Internal crypto helpers (browser-compatible, no Buffer) ────────────────
+
+function hexFromBytes(bytes: Uint8Array): string {
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function concatBytes(...arrays: Uint8Array[]): Uint8Array {
+  const total = arrays.reduce((sum, a) => sum + a.length, 0);
+  const result = new Uint8Array(total);
+  let offset = 0;
+  for (const a of arrays) { result.set(a, offset); offset += a.length; }
+  return result;
+}
+
+function bigintToBytes32(v: bigint): Uint8Array {
+  const hex = v.toString(16).padStart(64, "0");
+  const bytes = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  return bytes;
+}
 
 let _poseidon: any = null;
 
@@ -86,58 +112,60 @@ async function poseidonHash(inputs: bigint[]): Promise<bigint> {
   return poseidon.F.toObject(result);
 }
 
-function bigIntToBytes32BE(n: bigint): Buffer {
+function bigIntToBytes32BE(n: bigint): Uint8Array {
   if (n < 0n || n >= BN254_PRIME) {
     throw new Error(`bigint out of BN254 field range: ${n}`);
   }
-  return Buffer.from(n.toString(16).padStart(64, "0"), "hex");
+  return bigintToBytes32(n);
 }
 
-function bytes32ToBigInt(buf: Buffer | Uint8Array): bigint {
-  return BigInt("0x" + Buffer.from(buf).toString("hex"));
+function bytes32ToBigInt(buf: Uint8Array): bigint {
+  return BigInt("0x" + hexFromBytes(buf));
 }
 
-function toBytes32(buf: Buffer | Uint8Array): number[] {
+function toBytes32(buf: Uint8Array): number[] {
   return Array.from(buf.slice(0, 32));
 }
 
-function computeNameHash(name: string): Buffer {
-  return createHash("sha256").update("nara-zk:" + name).digest();
+async function computeNameHash(name: string): Promise<Uint8Array> {
+  const data = new TextEncoder().encode("nara-zk:" + name);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return new Uint8Array(digest);
 }
 
-function denomBuf(denomination: BN): Buffer {
-  return Buffer.from(denomination.toArray("le", 8));
+function denomBuf(denomination: BN): Uint8Array {
+  const bytes = new Uint8Array(8);
+  const arr = denomination.toArray("le", 8);
+  bytes.set(arr);
+  return bytes;
 }
 
 function packProof(proof: {
   pi_a: string[];
   pi_b: string[][];
   pi_c: string[];
-}): Buffer {
+}): Uint8Array {
   const ax = BigInt(proof.pi_a[0]!);
   const ay = BigInt(proof.pi_a[1]!);
   const ay_neg = BN254_PRIME - ay; // negate y: standard G1 negation on BN254
 
-  const proofA = Buffer.concat([
-    bigIntToBytes32BE(ax),
-    bigIntToBytes32BE(ay_neg),
-  ]);
-  const proofB = Buffer.concat([
+  const proofA = concatBytes(bigIntToBytes32BE(ax), bigIntToBytes32BE(ay_neg));
+  const proofB = concatBytes(
     bigIntToBytes32BE(BigInt(proof.pi_b[0]![1]!)), // x.c1
     bigIntToBytes32BE(BigInt(proof.pi_b[0]![0]!)), // x.c0
     bigIntToBytes32BE(BigInt(proof.pi_b[1]![1]!)), // y.c1
     bigIntToBytes32BE(BigInt(proof.pi_b[1]![0]!)), // y.c0
-  ]);
-  const proofC = Buffer.concat([
+  );
+  const proofC = concatBytes(
     bigIntToBytes32BE(BigInt(proof.pi_c[0]!)),
     bigIntToBytes32BE(BigInt(proof.pi_c[1]!)),
-  ]);
-  return Buffer.concat([proofA, proofB, proofC]); // 256 bytes total
+  );
+  return concatBytes(proofA, proofB, proofC); // 256 bytes total
 }
 
 async function buildMerklePath(
   leafIndex: bigint,
-  filledSubtrees: Buffer[],
+  filledSubtrees: Uint8Array[],
   zeros: bigint[]
 ): Promise<{ pathElements: bigint[]; pathIndices: number[] }> {
   const pathElements: bigint[] = new Array(MERKLE_LEVELS);
@@ -156,10 +184,10 @@ async function buildMerklePath(
 // Suppress snarkjs WASM console noise during proof generation.
 async function silentProve(
   input: Record<string, string | string[]>,
-  wasmPath: string,
-  zkeyPath: string
+  wasmPath: string | Uint8Array,
+  zkeyPath: string | Uint8Array
 ) {
-  const snarkjs = _require("snarkjs");
+  const snarkjs: any = await import("snarkjs");
   const savedLog = console.log;
   const savedError = console.error;
   console.log = () => {};
@@ -208,31 +236,31 @@ function createReadProgram(
 
 // ─── PDA helpers ─────────────────────────────────────────────────────────────
 
-function findZkIdPda(nameHashBuf: Buffer, programId: PublicKey): [PublicKey, number] {
+function findZkIdPda(nameHashBuf: Uint8Array, programId: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
-    [Buffer.from("zk_id"), nameHashBuf],
+    [new TextEncoder().encode("zk_id"), nameHashBuf],
     programId
   );
 }
 
-function findInboxPda(nameHashBuf: Buffer, programId: PublicKey): [PublicKey, number] {
+function findInboxPda(nameHashBuf: Uint8Array, programId: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
-    [Buffer.from("inbox"), nameHashBuf],
+    [new TextEncoder().encode("inbox"), nameHashBuf],
     programId
   );
 }
 
 function findConfigPda(programId: PublicKey): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync([Buffer.from("config")], programId);
+  return PublicKey.findProgramAddressSync([new TextEncoder().encode("config")], programId);
 }
 
 function findNullifierPda(
   denomination: BN,
-  nullifierHash: Buffer,
+  nullifierHash: Uint8Array,
   programId: PublicKey
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
-    [Buffer.from("nullifier"), denomBuf(denomination), nullifierHash],
+    [new TextEncoder().encode("nullifier"), denomBuf(denomination), nullifierHash],
     programId
   );
 }
@@ -248,10 +276,10 @@ function findNullifierPda(
  * has a unique idSecret, preventing nullifier collisions.
  */
 export async function deriveIdSecret(keypair: Keypair, name: string): Promise<bigint> {
-  const message = Buffer.from(`nara-zk:idsecret:v1:${name}`);
+  const message = new TextEncoder().encode(`nara-zk:idsecret:v1:${name}`);
   const sig = nacl.sign.detached(message, keypair.secretKey);
-  const digest = createHash("sha256").update(sig).digest();
-  const n = BigInt("0x" + digest.toString("hex"));
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", sig));
+  const n = BigInt("0x" + hexFromBytes(digest));
   return (n % (BN254_PRIME - 1n)) + 1n;
 }
 
@@ -260,7 +288,7 @@ export async function deriveIdSecret(keypair: Keypair, name: string): Promise<bi
  * The ZK withdraw circuit encodes the recipient as a BN254 field element.
  */
 export function isValidRecipient(pubkey: PublicKey): boolean {
-  return bytes32ToBigInt(Buffer.from(pubkey.toBytes())) < BN254_PRIME;
+  return bytes32ToBigInt(pubkey.toBytes()) < BN254_PRIME;
 }
 
 /**
@@ -285,7 +313,7 @@ export async function getZkIdInfo(
 ): Promise<ZkIdInfo | null> {
   const program = createReadProgram(connection, options?.programId);
   const programId = new PublicKey(options?.programId ?? DEFAULT_ZKID_PROGRAM_ID);
-  const [zkIdPda] = findZkIdPda(computeNameHash(name), programId);
+  const [zkIdPda] = findZkIdPda(await computeNameHash(name), programId);
   try {
     const data = await program.account.zkIdAccount.fetch(zkIdPda);
     return {
@@ -316,7 +344,7 @@ export async function createZkId(
   const program = createProgram(connection, payer, options?.programId);
   const programId = new PublicKey(options?.programId ?? DEFAULT_ZKID_PROGRAM_ID);
 
-  const nameHashBuf = computeNameHash(name);
+  const nameHashBuf = await computeNameHash(name);
   const idCommitment = await poseidonHash([idSecret]);
   const idCommitmentBuf = bigIntToBytes32BE(idCommitment);
 
@@ -347,7 +375,7 @@ export async function deposit(
   options?: ZkIdOptions
 ): Promise<string> {
   const program = createProgram(connection, payer, options?.programId);
-  const nameHashBuf = computeNameHash(name);
+  const nameHashBuf = await computeNameHash(name);
 
   return await program.methods
     .deposit(toBytes32(nameHashBuf), denomination)
@@ -369,7 +397,7 @@ export async function scanClaimableDeposits(
 ): Promise<ClaimableDeposit[]> {
   const program = createReadProgram(connection, options?.programId);
   const programId = new PublicKey(options?.programId ?? DEFAULT_ZKID_PROGRAM_ID);
-  const nameHashBuf = computeNameHash(name);
+  const nameHashBuf = await computeNameHash(name);
 
   const [zkIdPda] = findZkIdPda(nameHashBuf, programId);
   const [inboxPda] = findInboxPda(nameHashBuf, programId);
@@ -453,19 +481,19 @@ export async function withdraw(
 
   // Fetch Merkle tree state
   const [treePda] = PublicKey.findProgramAddressSync(
-    [Buffer.from("tree"), denomBuf(denominationBN)],
+    [new TextEncoder().encode("tree"), denomBuf(denominationBN)],
     programId
   );
   const treeData = await program.account.merkleTreeAccount.fetch(treePda);
 
   const rootIdx: number = treeData.currentRootIndex;
-  const root = Buffer.from((treeData.roots as number[][])[rootIdx]!);
+  const root = new Uint8Array((treeData.roots as number[][])[rootIdx]!);
   const filledSubtrees = (treeData.filledSubtrees as number[][]).map(s =>
-    Buffer.from(s)
+    new Uint8Array(s)
   );
   // Use on-chain precomputed zeros (avoids expensive client-side computation)
   const zeros = (treeData.zeros as number[][]).map(z =>
-    bytes32ToBigInt(Buffer.from(z))
+    bytes32ToBigInt(new Uint8Array(z))
   );
 
   const { pathElements, pathIndices } = await buildMerklePath(
@@ -476,7 +504,7 @@ export async function withdraw(
 
   const nullifier = await poseidonHash([idSecret, BigInt(depositInfo.depositIndex)]);
   const nullifierHashBuf = bigIntToBytes32BE(nullifier);
-  const recipientField = bytes32ToBigInt(Buffer.from(recipient.toBytes()));
+  const recipientField = bytes32ToBigInt(recipient.toBytes());
 
   const input = {
     idSecret: idSecret.toString(),
@@ -488,12 +516,20 @@ export async function withdraw(
     recipient: recipientField.toString(),
   };
 
-  const { proof } = await silentProve(input, WITHDRAW_WASM, WITHDRAW_ZKEY);
+  let wasmSource = options?.withdrawWasm;
+  let zkeySource = options?.withdrawZkey;
+  if (!wasmSource || !zkeySource) {
+    const defaults = await resolveDefaultZkPaths();
+    wasmSource ??= defaults.withdrawWasm;
+    zkeySource ??= defaults.withdrawZkey;
+  }
+
+  const { proof } = await silentProve(input, wasmSource, zkeySource);
   const packedProof = packProof(proof);
 
   return await program.methods
     .withdraw(
-      packedProof,
+      Buffer.from(packedProof) as any,
       toBytes32(root),
       toBytes32(nullifierHashBuf),
       recipient,
@@ -526,13 +562,13 @@ export async function transferZkId(
 ): Promise<string> {
   const program = createProgram(connection, payer, options?.programId);
   const programId = new PublicKey(options?.programId ?? DEFAULT_ZKID_PROGRAM_ID);
-  const nameHashBuf = computeNameHash(name);
+  const nameHashBuf = await computeNameHash(name);
 
   // Fetch current id_commitment from chain
   const [zkIdPda] = findZkIdPda(nameHashBuf, programId);
   const zkId = await program.account.zkIdAccount.fetch(zkIdPda);
   const currentCommitmentField = bytes32ToBigInt(
-    Buffer.from(zkId.idCommitment as number[])
+    new Uint8Array(zkId.idCommitment as number[])
   );
 
   // Compute new id_commitment
@@ -544,14 +580,23 @@ export async function transferZkId(
     idSecret: currentIdSecret.toString(),
     idCommitment: currentCommitmentField.toString(),
   };
-  const { proof } = await silentProve(input, OWNERSHIP_WASM, OWNERSHIP_ZKEY);
+
+  let wasmSource = options?.ownershipWasm;
+  let zkeySource = options?.ownershipZkey;
+  if (!wasmSource || !zkeySource) {
+    const defaults = await resolveDefaultZkPaths();
+    wasmSource ??= defaults.ownershipWasm;
+    zkeySource ??= defaults.ownershipZkey;
+  }
+
+  const { proof } = await silentProve(input, wasmSource, zkeySource);
   const packedProof = packProof(proof);
 
   return await program.methods
     .transferZkId(
       toBytes32(nameHashBuf),
       toBytes32(newCommitmentBuf),
-      packedProof
+      Buffer.from(packedProof) as any
     )
     .accounts({ payer: payer.publicKey } as any)
     .rpc();
@@ -566,7 +611,7 @@ export async function transferZkId(
 export async function computeIdCommitment(keypair: Keypair, name: string): Promise<string> {
   const idSecret = await deriveIdSecret(keypair, name);
   const commitment = await poseidonHash([idSecret]);
-  return bigIntToBytes32BE(commitment).toString("hex");
+  return hexFromBytes(bigIntToBytes32BE(commitment));
 }
 
 /**
@@ -588,12 +633,12 @@ export async function transferZkIdByCommitment(
   options?: ZkIdOptions
 ): Promise<string> {
   const program = createProgram(connection, payer, options?.programId);
-  const nameHashBuf = computeNameHash(name);
+  const nameHashBuf = await computeNameHash(name);
 
   const [zkIdPda] = findZkIdPda(nameHashBuf, new PublicKey(options?.programId ?? DEFAULT_ZKID_PROGRAM_ID));
   const zkId = await program.account.zkIdAccount.fetch(zkIdPda);
   const currentCommitmentField = bytes32ToBigInt(
-    Buffer.from(zkId.idCommitment as number[])
+    new Uint8Array(zkId.idCommitment as number[])
   );
 
   const newCommitmentBuf = bigIntToBytes32BE(newIdCommitment);
@@ -602,14 +647,23 @@ export async function transferZkIdByCommitment(
     idSecret: currentIdSecret.toString(),
     idCommitment: currentCommitmentField.toString(),
   };
-  const { proof } = await silentProve(input, OWNERSHIP_WASM, OWNERSHIP_ZKEY);
+
+  let wasmSource = options?.ownershipWasm;
+  let zkeySource = options?.ownershipZkey;
+  if (!wasmSource || !zkeySource) {
+    const defaults = await resolveDefaultZkPaths();
+    wasmSource ??= defaults.ownershipWasm;
+    zkeySource ??= defaults.ownershipZkey;
+  }
+
+  const { proof } = await silentProve(input, wasmSource, zkeySource);
   const packedProof = packProof(proof);
 
   return await program.methods
     .transferZkId(
       toBytes32(nameHashBuf),
       toBytes32(newCommitmentBuf),
-      packedProof
+      Buffer.from(packedProof) as any
     )
     .accounts({ payer: payer.publicKey } as any)
     .rpc();
@@ -630,18 +684,19 @@ export async function getConfig(
 ): Promise<{ admin: PublicKey; feeRecipient: PublicKey; feeAmount: number }> {
   const programId = new PublicKey(options?.programId ?? DEFAULT_ZKID_PROGRAM_ID);
   const [configPda] = PublicKey.findProgramAddressSync(
-    [Buffer.from("config")],
+    [new TextEncoder().encode("config")],
     programId
   );
   const accountInfo = await connection.getAccountInfo(configPda);
   if (!accountInfo) {
     throw new Error("ZK ID config account not found");
   }
-  const buf = Buffer.from(accountInfo.data);
+  const data = accountInfo.data;
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   let offset = 8; // skip discriminator
-  const admin = new PublicKey(buf.subarray(offset, offset + 32)); offset += 32;
-  const feeRecipient = new PublicKey(buf.subarray(offset, offset + 32)); offset += 32;
-  const feeAmount = Number(buf.readBigUInt64LE(offset));
+  const admin = new PublicKey(data.subarray(offset, offset + 32)); offset += 32;
+  const feeRecipient = new PublicKey(data.subarray(offset, offset + 32)); offset += 32;
+  const feeAmount = Number(view.getBigUint64(offset, true));
   return { admin, feeRecipient, feeAmount };
 }
 
