@@ -82,6 +82,7 @@ export {
 // Export agent registry functions and types
 export {
   registerAgent,
+  registerAgentWithReferral,
   getAgentRecord,
   getAgentInfo,
   getAgentMemory,
@@ -93,7 +94,9 @@ export {
   transferAgentAuthority,
   deleteAgent,
   logActivity,
+  logActivityWithReferral,
   makeLogActivityIx,
+  makeLogActivityWithReferralIx,
   initConfig as initAgentRegistryConfig,
   updateAdmin,
   updateFeeRecipient,

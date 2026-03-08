@@ -322,21 +322,29 @@ export async function submitAnswer(
   const program = createProgram(connection, wallet, options?.programId);
 
   if (activityLog) {
-    const { makeLogActivityIx } = await import("./agent_registry");
+    const { makeLogActivityIx, makeLogActivityWithReferralIx } = await import("./agent_registry");
     const submitIx = await program.methods
       .submitAnswer(proof.proofA as any, proof.proofB as any, proof.proofC as any, agent, model)
       .accounts({ user: wallet.publicKey, payer: wallet.publicKey })
       .instruction();
-    const logIx = await makeLogActivityIx(
-      connection,
-      wallet.publicKey,
-      activityLog.agentId,
-      activityLog.model,
-      activityLog.activity,
-      activityLog.log,
-      undefined,
-      activityLog.referralAgentId
-    );
+    const logIx = activityLog.referralAgentId
+      ? await makeLogActivityWithReferralIx(
+          connection,
+          wallet.publicKey,
+          activityLog.agentId,
+          activityLog.model,
+          activityLog.activity,
+          activityLog.log,
+          activityLog.referralAgentId
+        )
+      : await makeLogActivityIx(
+          connection,
+          wallet.publicKey,
+          activityLog.agentId,
+          activityLog.model,
+          activityLog.activity,
+          activityLog.log
+        );
     const tx = new Transaction().add(submitIx).add(logIx);
     tx.feePayer = wallet.publicKey;
     tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;

@@ -25,6 +25,7 @@
 
 import {
   registerAgent,
+  registerAgentWithReferral,
   getAgentRecord,
   getAgentInfo,
   getAgentMemory,
@@ -33,6 +34,7 @@ import {
   setMetadata,
   uploadMemory,
   logActivity,
+  logActivityWithReferral,
   setReferral,
   transferAgentAuthority,
   deleteAgent,
@@ -79,11 +81,10 @@ async function main() {
   // ── 1. Register agent (with referral) ─────────────────────────
   console.log(`\n--- Registering agent "${agentId}" with referral "${referralAgentId}" ---`);
   try {
-    const { signature, agentPubkey } = await registerAgent(
+    const { signature, agentPubkey } = await registerAgentWithReferral(
       connection,
       wallet,
       agentId,
-      undefined,
       referralAgentId
     );
     console.log("Registered:", agentPubkey.toBase58());
@@ -283,14 +284,13 @@ async function main() {
 
   console.log("\n--- Logging activity with referral ---");
 
-  const refActSig = await logActivity(
+  const refActSig = await logActivityWithReferral(
     connection,
     wallet,
     agentId,
     "gpt-4",
     "referral_test",
     "Testing logActivity with referral agent",
-    undefined,
     referralAgentId
   );
   console.log("Transaction:", refActSig);
@@ -353,12 +353,16 @@ async function main() {
   console.log("  Admin:", config.admin.toBase58());
   console.log("  Fee recipient:", config.feeRecipient.toBase58());
   console.log("  Point mint:", config.pointMint.toBase58());
+  console.log("  Referee mint:", config.refereeMint.toBase58());
+  console.log("  Referee activity mint:", config.refereeActivityMint.toBase58());
   console.log("  Register fee:", config.registerFee);
   console.log("  Points per activity (self):", config.pointsSelf);
   console.log("  Points per referral:", config.pointsReferral);
   console.log("  Referral register fee:", config.referralRegisterFee);
   console.log("  Referral fee share:", config.referralFeeShare);
   console.log("  Referral register points:", config.referralRegisterPoints);
+  console.log("  Activity reward:", config.activityReward);
+  console.log("  Referral activity reward:", config.referralActivityReward);
 
   // ── 11. Transfer authority (optional) ────────────────────────
   // Uncomment and set NEW_AUTHORITY to transfer ownership.
