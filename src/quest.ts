@@ -7,13 +7,14 @@ import {
   Keypair,
   LAMPORTS_PER_SOL,
   PublicKey,
-  Transaction,
 } from "@solana/web3.js";
+import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 import * as anchor from "@coral-xyz/anchor";
 import { Program, AnchorProvider, Wallet } from "@coral-xyz/anchor";
 import BN from "bn.js";
 import type { NaraQuest } from "./idls/nara_quest";
 import { DEFAULT_QUEST_PROGRAM_ID } from "./constants";
+import { sendTx } from "./tx";
 
 import naraQuestIdl from "./idls/nara_quest.json";
 
@@ -235,12 +236,10 @@ function getStakeRecordPda(
   return pda;
 }
 
-function getStakeVaultPda(programId: PublicKey): PublicKey {
-  const [pda] = PublicKey.findProgramAddressSync(
-    [new TextEncoder().encode("quest_stake_vault")],
-    programId
-  );
-  return pda;
+const WSOL_MINT = new PublicKey("So11111111111111111111111111111111111111112");
+
+function getStakeTokenAccount(stakeRecordPda: PublicKey): PublicKey {
+  return getAssociatedTokenAddressSync(WSOL_MINT, stakeRecordPda, true);
 }
 
 // ─── SDK functions ───────────────────────────────────────────────
@@ -392,56 +391,39 @@ export async function submitAnswer(
     }
   }
 
-  // If we need a composite transaction (stake and/or activityLog)
-  if (stakeIx || activityLog) {
-    const submitIx = await program.methods
-      .submitAnswer(proof.proofA as any, proof.proofB as any, proof.proofC as any, agent, model)
-      .accounts({ user: wallet.publicKey, payer: wallet.publicKey })
-      .instruction();
-
-    const tx = new Transaction();
-    if (stakeIx) tx.add(stakeIx);
-    tx.add(submitIx);
-
-    if (activityLog) {
-      const { makeLogActivityIx, makeLogActivityWithReferralIx } = await import("./agent_registry");
-      const logIx = activityLog.referralAgentId
-        ? await makeLogActivityWithReferralIx(
-            connection,
-            wallet.publicKey,
-            activityLog.agentId,
-            activityLog.model,
-            activityLog.activity,
-            activityLog.log,
-            activityLog.referralAgentId
-          )
-        : await makeLogActivityIx(
-            connection,
-            wallet.publicKey,
-            activityLog.agentId,
-            activityLog.model,
-            activityLog.activity,
-            activityLog.log
-          );
-      tx.add(logIx);
-    }
-
-    tx.feePayer = wallet.publicKey;
-    tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
-    tx.sign(wallet);
-    const signature = await connection.sendRawTransaction(tx.serialize(), {
-      skipPreflight: true,
-    });
-    await connection.confirmTransaction(signature, "confirmed");
-    return { signature };
-  }
-
-  const signature = await program.methods
+  const submitIx = await program.methods
     .submitAnswer(proof.proofA as any, proof.proofB as any, proof.proofC as any, agent, model)
     .accounts({ user: wallet.publicKey, payer: wallet.publicKey })
-    .signers([wallet])
-    .rpc({ skipPreflight: true });
+    .instruction();
 
+  const ixs = [];
+  if (stakeIx) ixs.push(stakeIx);
+  ixs.push(submitIx);
+
+  if (activityLog) {
+    const { makeLogActivityIx, makeLogActivityWithReferralIx } = await import("./agent_registry");
+    const logIx = activityLog.referralAgentId
+      ? await makeLogActivityWithReferralIx(
+          connection,
+          wallet.publicKey,
+          activityLog.agentId,
+          activityLog.model,
+          activityLog.activity,
+          activityLog.log,
+          activityLog.referralAgentId
+        )
+      : await makeLogActivityIx(
+          connection,
+          wallet.publicKey,
+          activityLog.agentId,
+          activityLog.model,
+          activityLog.activity,
+          activityLog.log
+        );
+    ixs.push(logIx);
+  }
+
+  const signature = await sendTx(connection, wallet, ixs, [], { skipPreflight: true });
   return { signature };
 }
 
@@ -551,11 +533,11 @@ export async function stake(
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
   const lamports = new BN(Math.round(amount * LAMPORTS_PER_SOL));
-  return program.methods
+  const ix = await program.methods
     .stake(lamports)
     .accounts({ user: wallet.publicKey } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }
 
 /**
@@ -571,15 +553,16 @@ export async function unstake(
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
   const lamports = new BN(Math.round(amount * LAMPORTS_PER_SOL));
-  return program.methods
+  const ix = await program.methods
     .unstake(lamports)
     .accounts({ user: wallet.publicKey } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }
 
 /**
  * Get stake info for a user. Returns null if no stake record exists.
+ * Reads the wSOL token account balance to determine staked amount.
  */
 export async function getStakeInfo(
   connection: Connection,
@@ -591,8 +574,17 @@ export async function getStakeInfo(
   const stakeRecordPda = getStakeRecordPda(program.programId, user);
   try {
     const record = await program.account.stakeRecord.fetch(stakeRecordPda);
+    // Read wSOL token account balance (stake amount is stored as wSOL tokens)
+    const stakeTokenAccount = getStakeTokenAccount(stakeRecordPda);
+    let amount = 0;
+    try {
+      const balance = await connection.getTokenAccountBalance(stakeTokenAccount);
+      amount = Number(balance.value.amount) / LAMPORTS_PER_SOL;
+    } catch {
+      // Token account may not exist yet (no stake deposited)
+    }
     return {
-      amount: record.amount.toNumber() / LAMPORTS_PER_SOL,
+      amount,
       stakeRound: record.stakeRound.toNumber(),
     };
   } catch {
@@ -627,13 +619,11 @@ export async function createQuestion(
   const deadline = new BN(Math.floor(Date.now() / 1000) + deadlineSeconds);
   const rewardAmount = new BN(Math.round(rewardSol * LAMPORTS_PER_SOL));
 
-  const signature = await program.methods
+  const ix = await program.methods
     .createQuestion(question, answerHash as any, deadline, rewardAmount, difficulty)
     .accounts({ authority: wallet.publicKey } as any)
-    .signers([wallet])
-    .rpc();
-
-  return signature;
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }
 
 // ─── Admin functions ───────────────────────────────────────────────
@@ -647,11 +637,11 @@ export async function initializeQuest(
   options?: QuestOptions
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
-  return program.methods
+  const ix = await program.methods
     .initialize()
     .accounts({ authority: wallet.publicKey } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }
 
 /**
@@ -664,11 +654,11 @@ export async function setMaxRewardCount(
   options?: QuestOptions
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
-  return program.methods
+  const ix = await program.methods
     .setMaxRewardCount(maxRewardCount)
     .accounts({ authority: wallet.publicKey } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }
 
 /**
@@ -681,11 +671,11 @@ export async function setMinRewardCount(
   options?: QuestOptions
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
-  return program.methods
+  const ix = await program.methods
     .setMinRewardCount(minRewardCount)
     .accounts({ authority: wallet.publicKey } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }
 
 /**
@@ -698,11 +688,11 @@ export async function transferQuestAuthority(
   options?: QuestOptions
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
-  return program.methods
+  const ix = await program.methods
     .transferAuthority(newAuthority)
     .accounts({ authority: wallet.publicKey } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }
 
 /**

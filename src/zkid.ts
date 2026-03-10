@@ -15,6 +15,7 @@ import nacl from "tweetnacl";
 import BN from "bn.js";
 import type { NaraZk } from "./idls/nara_zk";
 import { DEFAULT_ZKID_PROGRAM_ID } from "./constants";
+import { sendTx } from "./tx";
 import naraZkIdl from "./idls/nara_zk.json";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -352,13 +353,14 @@ export async function createZkId(
   const [configPda] = findConfigPda(programId);
   const config = await program.account.configAccount.fetch(configPda);
 
-  return await program.methods
+  const ix = await program.methods
     .register(toBytes32(nameHashBuf), toBytes32(idCommitmentBuf))
     .accounts({
       payer: payer.publicKey,
       feeRecipient: config.feeRecipient,
     } as any)
-    .rpc();
+    .instruction();
+  return sendTx(connection, payer, [ix]);
 }
 
 /**
@@ -377,10 +379,11 @@ export async function deposit(
   const program = createProgram(connection, payer, options?.programId);
   const nameHashBuf = await computeNameHash(name);
 
-  return await program.methods
+  const ix = await program.methods
     .deposit(toBytes32(nameHashBuf), denomination)
     .accounts({ depositor: payer.publicKey } as any)
-    .rpc();
+    .instruction();
+  return sendTx(connection, payer, [ix]);
 }
 
 /**
@@ -527,7 +530,7 @@ export async function withdraw(
   const { proof } = await silentProve(input, wasmSource, zkeySource);
   const packedProof = packProof(proof);
 
-  return await program.methods
+  const ix = await program.methods
     .withdraw(
       Buffer.from(packedProof) as any,
       toBytes32(root),
@@ -539,7 +542,8 @@ export async function withdraw(
       payer: payer.publicKey,
       recipient,
     } as any)
-    .rpc();
+    .instruction();
+  return sendTx(connection, payer, [ix]);
 }
 
 /**
@@ -684,14 +688,15 @@ export async function transferZkId(
   const { proof } = await silentProve(input, wasmSource, zkeySource);
   const packedProof = packProof(proof);
 
-  return await program.methods
+  const ix = await program.methods
     .transferZkId(
       toBytes32(nameHashBuf),
       toBytes32(newCommitmentBuf),
       Buffer.from(packedProof) as any
     )
     .accounts({ payer: payer.publicKey } as any)
-    .rpc();
+    .instruction();
+  return sendTx(connection, payer, [ix]);
 }
 
 /**
@@ -751,14 +756,15 @@ export async function transferZkIdByCommitment(
   const { proof } = await silentProve(input, wasmSource, zkeySource);
   const packedProof = packProof(proof);
 
-  return await program.methods
+  const ix = await program.methods
     .transferZkId(
       toBytes32(nameHashBuf),
       toBytes32(newCommitmentBuf),
       Buffer.from(packedProof) as any
     )
     .accounts({ payer: payer.publicKey } as any)
-    .rpc();
+    .instruction();
+  return sendTx(connection, payer, [ix]);
 }
 
 // ─── Admin functions ──────────────────────────────────────────────────────────
@@ -801,11 +807,11 @@ export async function initializeConfig(
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
   const fee = typeof feeAmount === "number" ? new BN(feeAmount) : feeAmount;
-  return program.methods
+  const ix = await program.methods
     .initializeConfig(feeRecipient, fee)
     .accounts({ admin: wallet.publicKey } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }
 
 /**
@@ -821,9 +827,9 @@ export async function updateConfig(
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
   const fee = typeof newFeeAmount === "number" ? new BN(newFeeAmount) : newFeeAmount;
-  return program.methods
+  const ix = await program.methods
     .updateConfig(newAdmin, newFeeRecipient, fee)
     .accounts({ admin: wallet.publicKey } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }

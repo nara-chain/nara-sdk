@@ -3,15 +3,16 @@
  *
  * This example demonstrates how to:
  * 1. Fetch the current quest question
- * 2. Check if you've already answered
- * 3. Generate a ZK proof for your answer
- * 4. Submit the answer on-chain (direct or via relay)
- * 5. Parse the reward from the transaction
+ * 2. Generate a ZK proof for your answer
+ * 3. Test A: stake=auto + answer in one tx (new address)
+ * 4. Test B: stake=1 + answer in one tx (new address)
+ *
+ * Each test creates a fresh keypair, funds it from the main wallet, then runs.
  *
  * Prerequisites:
  * - Set PRIVATE_KEY environment variable (base58 or JSON array)
  *
- * Run: tsx examples/8-quest.ts
+ * Run: tsx examples/quest.ts
  */
 
 import {
@@ -19,11 +20,17 @@ import {
   hasAnswered,
   generateProof,
   submitAnswer,
-  submitAnswerViaRelay,
   parseQuestReward,
+  getStakeInfo,
+  sendTx,
   Keypair,
+  getAltAddress,
 } from "../index";
-import { Connection } from "@solana/web3.js";
+import {
+  Connection,
+  LAMPORTS_PER_SOL,
+  SystemProgram,
+} from "@solana/web3.js";
 import bs58 from "bs58";
 import { readFileSync } from "fs";
 import { dirname, join } from "path";
@@ -42,6 +49,99 @@ function lookupAnswer(question: string): string | null {
   }
 }
 
+/** Fund a new address from the main wallet */
+async function fundAddress(
+  connection: Connection,
+  funder: Keypair,
+  recipient: Keypair,
+  solAmount: number
+) {
+  const ix = SystemProgram.transfer({
+    fromPubkey: funder.publicKey,
+    toPubkey: recipient.publicKey,
+    lamports: Math.round(solAmount * LAMPORTS_PER_SOL),
+  });
+  const sig = await sendTx(connection, funder, [ix]);
+  console.log(`  Funded ${recipient.publicKey.toBase58()} with ${solAmount} SOL (tx: ${sig})`);
+}
+
+/** Run a single answer test with the given stake option */
+async function runTest(
+  label: string,
+  connection: Connection,
+  funder: Keypair,
+  stakeOption: "auto" | number
+) {
+  console.log(`\n========== ${label} ==========`);
+
+  // Re-fetch quest info (question may have changed between tests)
+  console.log("  Fetching latest quest info...");
+  const quest = await getQuestInfo(connection, funder);
+  if (!quest.active) {
+    console.log("  No active quest, skipping.");
+    return;
+  }
+  if (quest.expired) {
+    console.log("  Quest expired, skipping.");
+    return;
+  }
+  console.log(`  Question: ${quest.question}, Round: #${quest.round}`);
+
+  // Solve the question
+  let answer = process.env.QUEST_ANSWER ?? null;
+  if (!answer) {
+    answer = lookupAnswer(quest.question);
+    if (answer) {
+      console.log(`  Auto-solved: "${answer}"`);
+    }
+  }
+  if (!answer) {
+    console.log("  No answer available, skipping.");
+    return;
+  }
+
+  // Create and fund a fresh keypair
+  const testWallet = Keypair.generate();
+  console.log(`  Test wallet: ${testWallet.publicKey.toBase58()}`);
+  await fundAddress(connection, funder, testWallet, 5);
+
+  // Generate ZK proof for this new address
+  console.log("  Generating ZK proof...");
+  const proof = await generateProof(
+    answer,
+    quest.answerHash,
+    testWallet.publicKey,
+    quest.round
+  );
+
+  // Check stake status
+  const stakeInfo = await getStakeInfo(connection, testWallet.publicKey);
+  console.log(`  Stake before: ${stakeInfo?.amount ?? 0} SOL (required: ${quest.stakeRequirement} SOL)`);
+
+  // Submit answer with stake in the same tx
+  console.log(`  Submitting with stake=${stakeOption}...`);
+  try {
+    const result = await submitAnswer(connection, testWallet, proof.solana, "", "", {
+      stake: stakeOption,
+    });
+    console.log(`  Transaction: ${result.signature}`);
+
+    // Check stake after
+    const stakeAfter = await getStakeInfo(connection, testWallet.publicKey);
+    console.log(`  Stake after: ${stakeAfter?.amount ?? 0} SOL`);
+
+    // Parse reward (only after tx confirmed successfully)
+    const reward = await parseQuestReward(connection, result.signature);
+    if (reward.rewarded) {
+      console.log(`  Reward: ${reward.rewardNso} NSO (winner ${reward.winner})`);
+    } else {
+      console.log("  Correct answer, but no reward slots remaining");
+    }
+  } catch (err) {
+    console.error(`  Transaction failed: ${err}`);
+  }
+}
+
 async function main() {
   const privateKey = process.env.PRIVATE_KEY;
   if (!privateKey) {
@@ -55,81 +155,21 @@ async function main() {
   const rpcUrl = process.env.RPC_URL || "https://mainnet-api.nara.build/";
   const connection = new Connection(rpcUrl, "confirmed");
 
-  console.log("Wallet:", wallet.publicKey.toBase58());
-
-  // 1. Fetch quest info
-  console.log("\n--- Fetching quest info ---");
-  const quest = await getQuestInfo(connection, wallet);
-
-  if (!quest.active) {
-    console.log("No active quest at the moment");
-    return;
-  }
-
-  console.log(`Question: ${quest.question}`);
-  console.log(`Round: #${quest.round}`);
-  console.log(`Reward per winner: ${quest.rewardPerWinner} NSO`);
-  console.log(`Remaining slots: ${quest.remainingSlots}`);
-  console.log(`Time remaining: ${quest.timeRemaining}s`);
-
-  if (quest.expired) {
-    console.log("Quest has expired, waiting for next round...");
-    return;
-  }
-
-  // 2. Check if already answered
-  console.log("\n--- Checking answer status ---");
-  const alreadyAnswered = await hasAnswered(connection, wallet);
-  if (alreadyAnswered) {
-    console.log("Already answered this round, waiting for next round...");
-    return;
-  }
-
-  // 3. Solve the question
-  let answer = process.env.QUEST_ANSWER ?? null;
-  if (!answer) {
-    answer = lookupAnswer(quest.question);
-    if (answer) {
-      console.log(`Auto-solved from test-questions.json: "${answer}"`);
-    }
-  }
-  if (!answer) {
-    console.log("Set QUEST_ANSWER env or ensure .assets/test-questions.json has the answer.");
-    return;
-  }
-  console.log(`\n--- Generating ZK proof for answer: "${answer}" ---`);
-
-  const proof = await generateProof(
-    answer,
-    quest.answerHash,
-    wallet.publicKey,
-    quest.round
-  );
-  console.log("Proof generated successfully");
-
-  // 4. Submit answer
-  // Option A: Direct on-chain submission (requires gas)
-  console.log("\n--- Submitting answer on-chain ---");
-  const result = await submitAnswer(connection, wallet, proof.solana);
-  console.log(`Transaction: ${result.signature}`);
-
-  // Option B: Gasless relay submission (uncomment to use)
-  // const relayResult = await submitAnswerViaRelay(
-  //   "https://quest-api.nara.build",
-  //   wallet.publicKey,
-  //   proof.hex
-  // );
-  // console.log(`Transaction: ${relayResult.txHash}`);
-
-  // 5. Parse reward
-  console.log("\n--- Checking reward ---");
-  const reward = await parseQuestReward(connection, result.signature);
-
-  if (reward.rewarded) {
-    console.log(`Reward: ${reward.rewardNso} NSO (winner ${reward.winner})`);
+  console.log("Main wallet:", wallet.publicKey.toBase58());
+  const altAddr = getAltAddress();
+  if (altAddr) {
+    console.log(`ALT enabled: ${altAddr}`);
   } else {
-    console.log("Correct answer, but no reward slots remaining");
+    console.log("ALT: disabled (using legacy transactions)");
   }
+
+  // Test A: stake=auto
+  await runTest("Test A: stake=auto", connection, wallet, "auto");
+
+  // Test B: stake=1 (fixed 1 SOL)
+  await runTest("Test B: stake=1", connection, wallet, 1);
+
+  console.log("\n--- All tests complete ---");
 }
 
 main().catch((err) => {

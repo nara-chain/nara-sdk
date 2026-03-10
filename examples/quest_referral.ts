@@ -39,6 +39,7 @@ import { Program, AnchorProvider, Wallet } from "@coral-xyz/anchor";
 import type { NaraAgentRegistry } from "../src/idls/nara_agent_registry";
 import naraAgentRegistryIdl from "../src/idls/nara_agent_registry.json";
 import { DEFAULT_AGENT_REGISTRY_PROGRAM_ID } from "../src/constants";
+import { getAltAddress } from "../src/tx";
 
 const TRANSFER_AMOUNT = 2 * LAMPORTS_PER_SOL;
 
@@ -82,6 +83,12 @@ async function main() {
   const connection = new Connection(rpcUrl, "confirmed");
 
   console.log("Main wallet:", mainWallet.publicKey.toBase58());
+  const altAddr = getAltAddress();
+  if (altAddr) {
+    console.log(`ALT enabled: ${altAddr}`);
+  } else {
+    console.log("ALT: disabled (using legacy transactions)");
+  }
 
   // ── 1. Generate random wallet and fund it ──────────────────────
   console.log("\n--- Generating referral wallet ---");
@@ -111,39 +118,27 @@ async function main() {
   const suffix = Math.random().toString(16).slice(2, 8);
   const mainAgentId = `test-main-${suffix}`;
   console.log(`\n--- Registering main agent "${mainAgentId}" ---`);
-  try {
-    const { signature } = await registerAgent(
-      connection,
-      mainWallet,
-      mainAgentId
-    );
-    console.log("Registered, tx:", signature);
-  } catch (err: any) {
-    console.log("Register skipped:", err.message.slice(0, 80));
-  }
+  const { signature: mainRegSig } = await registerAgent(
+    connection,
+    mainWallet,
+    mainAgentId
+  );
+  console.log("Registered, tx:", mainRegSig);
 
   // ── 3. Register referral agent ─────────────────────────────────
   const referralAgentId = `test-ref-${suffix}`;
   console.log(`\n--- Registering referral agent "${referralAgentId}" ---`);
-  try {
-    const { signature } = await registerAgent(
-      connection,
-      referralWallet,
-      referralAgentId
-    );
-    console.log("Registered, tx:", signature);
-  } catch (err: any) {
-    console.log("Register skipped:", err.message.slice(0, 80));
-  }
+  const { signature: refRegSig } = await registerAgent(
+    connection,
+    referralWallet,
+    referralAgentId
+  );
+  console.log("Registered, tx:", refRegSig);
 
   // ── 4. Set referral relationship ────────────────────────────────
   console.log(`\n--- Setting referral: ${mainAgentId} -> ${referralAgentId} ---`);
-  try {
-    const sig = await setReferral(connection, mainWallet, mainAgentId, referralAgentId);
-    console.log("Referral set, tx:", sig);
-  } catch (err: any) {
-    console.log("Set referral skipped:", err.message.slice(0, 80));
-  }
+  const referralSig = await setReferral(connection, mainWallet, mainAgentId, referralAgentId);
+  console.log("Referral set, tx:", referralSig);
 
   // ── 5. Query points config ──────────────────────────────────────
   console.log("\n--- Points config ---");
@@ -224,7 +219,7 @@ async function main() {
     proof.solana,
     mainAgentId,
     "integration-test",
-    undefined, // options
+    { stake: "auto" }, // auto-stake if needed
     {
       agentId: mainAgentId,
       model: "integration-test",

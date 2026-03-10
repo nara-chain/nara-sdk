@@ -14,6 +14,7 @@ import type { NaraSkillsHub } from "./idls/nara_skills_hub";
 import { DEFAULT_SKILLS_PROGRAM_ID } from "./constants";
 
 import naraSkillsIdl from "./idls/nara_skills_hub.json";
+import { sendTx } from "./tx";
 
 // ─── Constants ───────────────────────────────────────────────────
 
@@ -25,42 +26,6 @@ const BUFFER_HEADER_SIZE = 144;
 
 /** SkillContent account header size: 8 discriminator + 32 skill + 64 _reserved */
 const CONTENT_HEADER_SIZE = 104;
-
-// ─── Helpers ─────────────────────────────────────────────────────
-
-/** Send a transaction and poll until confirmed, without using WebSocket. */
-async function sendAndConfirmTx(
-  connection: Connection,
-  tx: anchor.web3.Transaction,
-  signers: anchor.web3.Signer[]
-): Promise<string> {
-  const { blockhash, lastValidBlockHeight } =
-    await connection.getLatestBlockhash("confirmed");
-  tx.recentBlockhash = blockhash;
-  tx.feePayer = signers[0]!.publicKey;
-  tx.sign(...signers);
-
-  const rawTx = tx.serialize();
-  const sig = await connection.sendRawTransaction(rawTx, {
-    skipPreflight: false,
-  });
-
-  while (true) {
-    const { value } = await connection.getSignatureStatuses([sig]);
-    const status = value[0];
-    if (status) {
-      if (status.err) throw new Error(`Transaction failed: ${JSON.stringify(status.err)}`);
-      if (status.confirmationStatus === "confirmed" || status.confirmationStatus === "finalized") {
-        return sig;
-      }
-    }
-    const currentHeight = await connection.getBlockHeight("confirmed");
-    if (currentHeight > lastValidBlockHeight) {
-      throw new Error(`Transaction expired (blockhash no longer valid): ${sig}`);
-    }
-    await new Promise((r) => setTimeout(r, 1000));
-  }
-}
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -223,14 +188,14 @@ export async function registerSkill(
   // ProgramConfig bytemuck: 8 disc + 32 admin + 8 register_fee + 32 fee_recipient
   const feeRecipient = new PublicKey(configBuf.subarray(48, 80));
 
-  const signature = await program.methods
+  const ix = await program.methods
     .registerSkill(name, author)
     .accounts({
       authority: wallet.publicKey,
       feeRecipient,
     } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  const signature = await sendTx(connection, wallet, [ix]);
 
   const skillPubkey = getSkillPda(program.programId, name);
   return { signature, skillPubkey };
@@ -329,11 +294,11 @@ export async function setDescription(
   options?: SkillOptions
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
-  return program.methods
+  const ix = await program.methods
     .setDescription(name, description)
     .accounts({ authority: wallet.publicKey } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }
 
 /**
@@ -347,11 +312,11 @@ export async function updateMetadata(
   options?: SkillOptions
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
-  return program.methods
+  const ix = await program.methods
     .updateMetadata(name, data)
     .accounts({ authority: wallet.publicKey } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }
 
 /**
@@ -365,11 +330,11 @@ export async function transferAuthority(
   options?: SkillOptions
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
-  return program.methods
+  const ix = await program.methods
     .transferAuthority(name, newAuthority)
     .accounts({ authority: wallet.publicKey } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }
 
 /**
@@ -386,11 +351,11 @@ export async function closeBuffer(
   if (!record.pendingBuffer) {
     throw new Error(`Skill "${name}" has no pending buffer`);
   }
-  return program.methods
+  const ix = await program.methods
     .closeBuffer(name)
     .accounts({ authority: wallet.publicKey, buffer: record.pendingBuffer } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }
 
 /**
@@ -411,14 +376,14 @@ export async function deleteSkill(
     ? wallet.publicKey
     : record.content;
 
-  return program.methods
+  const ix = await program.methods
     .deleteSkill(name)
     .accounts({
       authority: wallet.publicKey,
       contentAccount,
     } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }
 
 /**
@@ -452,26 +417,24 @@ export async function uploadSkillContent(
   const bufferSize = BUFFER_HEADER_SIZE + totalLen;
   const bufferRent = await connection.getMinimumBalanceForRentExemption(bufferSize);
 
-  const createBufferTx = new anchor.web3.Transaction().add(
-    SystemProgram.createAccount({
-      fromPubkey: wallet.publicKey,
-      newAccountPubkey: bufferKeypair.publicKey,
-      lamports: bufferRent,
-      space: bufferSize,
-      programId: program.programId,
-    })
-  );
-  await sendAndConfirmTx(connection, createBufferTx, [wallet, bufferKeypair]);
+  const createBufferIx = SystemProgram.createAccount({
+    fromPubkey: wallet.publicKey,
+    newAccountPubkey: bufferKeypair.publicKey,
+    lamports: bufferRent,
+    space: bufferSize,
+    programId: program.programId,
+  });
+  await sendTx(connection, wallet, [createBufferIx], [bufferKeypair]);
 
   // ── Step 2: init_buffer ───────────────────────────────────────
-  await program.methods
+  const initBufferIx = await program.methods
     .initBuffer(name, totalLen)
     .accounts({
       authority: wallet.publicKey,
       buffer: bufferKeypair.publicKey,
     } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  await sendTx(connection, wallet, [initBufferIx]);
 
   // ── Step 3: write chunks ──────────────────────────────────────
   const totalChunks = Math.ceil(totalLen / chunkSize);
@@ -479,14 +442,14 @@ export async function uploadSkillContent(
   let chunkIndex = 0;
   while (offset < totalLen) {
     const chunk = Buffer.from(content.slice(offset, offset + chunkSize));
-    const writeSig = await program.methods
+    const writeIx = await program.methods
       .writeToBuffer(name, offset, chunk)
       .accounts({
         authority: wallet.publicKey,
         buffer: bufferKeypair.publicKey,
       } as any)
-      .signers([wallet])
-      .rpc();
+      .instruction();
+    const writeSig = await sendTx(connection, wallet, [writeIx]);
     offset += chunk.length;
     chunkIndex++;
     options?.onProgress?.(chunkIndex, totalChunks, writeSig);
@@ -497,20 +460,18 @@ export async function uploadSkillContent(
   const contentSize = CONTENT_HEADER_SIZE + totalLen;
   const contentRent = await connection.getMinimumBalanceForRentExemption(contentSize);
 
-  const createContentTx = new anchor.web3.Transaction().add(
-    SystemProgram.createAccount({
-      fromPubkey: wallet.publicKey,
-      newAccountPubkey: contentKeypair.publicKey,
-      lamports: contentRent,
-      space: contentSize,
-      programId: program.programId,
-    })
-  );
-  await sendAndConfirmTx(connection, createContentTx, [wallet, contentKeypair]);
+  const createContentIx = SystemProgram.createAccount({
+    fromPubkey: wallet.publicKey,
+    newAccountPubkey: contentKeypair.publicKey,
+    lamports: contentRent,
+    space: contentSize,
+    programId: program.programId,
+  });
+  await sendTx(connection, wallet, [createContentIx], [contentKeypair]);
 
   // ── Step 5: finalize ──────────────────────────────────────────
   if (isUpdate) {
-    return program.methods
+    const finalizeIx = await program.methods
       .finalizeSkillUpdate(name)
       .accounts({
         authority: wallet.publicKey,
@@ -518,18 +479,18 @@ export async function uploadSkillContent(
         newContent: contentKeypair.publicKey,
         oldContent: existingContent,
       } as any)
-      .signers([wallet])
-      .rpc();
+      .instruction();
+    return sendTx(connection, wallet, [finalizeIx]);
   } else {
-    return program.methods
+    const finalizeIx = await program.methods
       .finalizeSkillNew(name)
       .accounts({
         authority: wallet.publicKey,
         buffer: bufferKeypair.publicKey,
         newContent: contentKeypair.publicKey,
       } as any)
-      .signers([wallet])
-      .rpc();
+      .instruction();
+    return sendTx(connection, wallet, [finalizeIx]);
   }
 }
 
@@ -566,11 +527,11 @@ export async function initConfig(
   options?: SkillOptions
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
-  return program.methods
+  const ix = await program.methods
     .initConfig()
     .accounts({ admin: wallet.publicKey } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }
 
 /**
@@ -583,11 +544,11 @@ export async function updateAdmin(
   options?: SkillOptions
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
-  return program.methods
+  const ix = await program.methods
     .updateAdmin(newAdmin)
     .accounts({ admin: wallet.publicKey } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }
 
 /**
@@ -600,11 +561,11 @@ export async function updateFeeRecipient(
   options?: SkillOptions
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
-  return program.methods
+  const ix = await program.methods
     .updateFeeRecipient(newRecipient)
     .accounts({ admin: wallet.publicKey } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }
 
 /**
@@ -618,9 +579,9 @@ export async function updateRegisterFee(
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
   const fee = typeof newFee === "number" ? new anchor.BN(newFee) : newFee;
-  return program.methods
+  const ix = await program.methods
     .updateRegisterFee(fee)
     .accounts({ admin: wallet.publicKey } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }

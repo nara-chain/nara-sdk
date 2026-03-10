@@ -15,6 +15,7 @@ import { Program, AnchorProvider, Wallet } from "@coral-xyz/anchor";
 import { getAssociatedTokenAddressSync, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
 import type { NaraAgentRegistry } from "./idls/nara_agent_registry";
 import { DEFAULT_AGENT_REGISTRY_PROGRAM_ID } from "./constants";
+import { sendTx } from "./tx";
 
 import naraAgentRegistryIdl from "./idls/nara_agent_registry.json";
 
@@ -28,42 +29,6 @@ const BUFFER_HEADER_SIZE = 144;
 
 /** AgentMemory account header: 8 discriminator + 32 agent + 64 _reserved */
 const MEMORY_HEADER_SIZE = 104;
-
-// ─── Helpers ─────────────────────────────────────────────────────
-
-/** Send a transaction and poll until confirmed, without using WebSocket. */
-async function sendAndConfirmTx(
-  connection: Connection,
-  tx: anchor.web3.Transaction,
-  signers: anchor.web3.Signer[]
-): Promise<string> {
-  const { blockhash, lastValidBlockHeight } =
-    await connection.getLatestBlockhash("confirmed");
-  tx.recentBlockhash = blockhash;
-  tx.feePayer = signers[0]!.publicKey;
-  tx.sign(...signers);
-
-  const rawTx = tx.serialize();
-  const sig = await connection.sendRawTransaction(rawTx, {
-    skipPreflight: false,
-  });
-
-  while (true) {
-    const { value } = await connection.getSignatureStatuses([sig]);
-    const status = value[0];
-    if (status) {
-      if (status.err) throw new Error(`Transaction failed: ${JSON.stringify(status.err)}`);
-      if (status.confirmationStatus === "confirmed" || status.confirmationStatus === "finalized") {
-        return sig;
-      }
-    }
-    const currentHeight = await connection.getBlockHeight("confirmed");
-    if (currentHeight > lastValidBlockHeight) {
-      throw new Error(`Transaction expired (blockhash no longer valid): ${sig}`);
-    }
-    await new Promise((r) => setTimeout(r, 1000));
-  }
-}
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -400,14 +365,14 @@ export async function registerAgent(
   const program = createProgram(connection, wallet, options?.programId);
   const config = await getConfig(connection, options);
 
-  const signature = await program.methods
+  const ix = await program.methods
     .registerAgent(agentId)
     .accounts({
       authority: wallet.publicKey,
       feeRecipient: config.feeRecipient,
     } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  const signature = await sendTx(connection, wallet, [ix]);
 
   const agentPubkey = getAgentPda(program.programId, agentId);
   return { signature, agentPubkey };
@@ -439,7 +404,7 @@ export async function registerAgentWithReferral(
     refereeMint, referralAuthority, true, TOKEN_2022_PROGRAM_ID
   );
 
-  const signature = await program.methods
+  const ix = await program.methods
     .registerAgentWithReferral(agentId)
     .accounts({
       authority: wallet.publicKey,
@@ -449,8 +414,8 @@ export async function registerAgentWithReferral(
       referralPointAccount,
       referralRefereeAccount,
     } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  const signature = await sendTx(connection, wallet, [ix]);
 
   const agentPubkey = getAgentPda(program.programId, agentId);
   return { signature, agentPubkey };
@@ -467,11 +432,11 @@ export async function transferAgentAuthority(
   options?: AgentRegistryOptions
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
-  return program.methods
+  const ix = await program.methods
     .transferAuthority(agentId, newAuthority)
     .accounts({ authority: wallet.publicKey } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }
 
 /**
@@ -492,14 +457,14 @@ export async function deleteAgent(
     ? wallet.publicKey
     : record.memory;
 
-  return program.methods
+  const ix = await program.methods
     .deleteAgent(agentId)
     .accounts({
       authority: wallet.publicKey,
       memoryAccount,
     } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }
 
 // ─── Bio & Metadata ─────────────────────────────────────────────
@@ -515,11 +480,11 @@ export async function setBio(
   options?: AgentRegistryOptions
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
-  return program.methods
+  const ix = await program.methods
     .setBio(agentId, bio)
     .accounts({ authority: wallet.publicKey } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }
 
 /**
@@ -533,11 +498,11 @@ export async function setMetadata(
   options?: AgentRegistryOptions
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
-  return program.methods
+  const ix = await program.methods
     .setMetadata(agentId, data)
     .accounts({ authority: wallet.publicKey } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }
 
 // ─── Memory Upload ──────────────────────────────────────────────
@@ -583,26 +548,24 @@ export async function uploadMemory(
   const bufferSize = BUFFER_HEADER_SIZE + totalLen;
   const bufferRent = await connection.getMinimumBalanceForRentExemption(bufferSize);
 
-  const createBufferTx = new anchor.web3.Transaction().add(
-    SystemProgram.createAccount({
-      fromPubkey: wallet.publicKey,
-      newAccountPubkey: bufferKeypair.publicKey,
-      lamports: bufferRent,
-      space: bufferSize,
-      programId: program.programId,
-    })
-  );
-  await sendAndConfirmTx(connection, createBufferTx, [wallet, bufferKeypair]);
+  const createBufferIx = SystemProgram.createAccount({
+    fromPubkey: wallet.publicKey,
+    newAccountPubkey: bufferKeypair.publicKey,
+    lamports: bufferRent,
+    space: bufferSize,
+    programId: program.programId,
+  });
+  await sendTx(connection, wallet, [createBufferIx], [bufferKeypair]);
 
   // ── Step 2: init_buffer ───────────────────────────────────────
-  await program.methods
+  const initBufferIx = await program.methods
     .initBuffer(agentId, totalLen)
     .accounts({
       authority: wallet.publicKey,
       buffer: bufferKeypair.publicKey,
     } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  await sendTx(connection, wallet, [initBufferIx]);
 
   // ── Step 3: write chunks ──────────────────────────────────────
   const totalChunks = Math.ceil(totalLen / chunkSize);
@@ -610,14 +573,14 @@ export async function uploadMemory(
   let chunkIndex = 0;
   while (offset < totalLen) {
     const chunk = Buffer.from(data.slice(offset, offset + chunkSize));
-    const writeSig = await program.methods
+    const writeIx = await program.methods
       .writeToBuffer(agentId, offset, chunk)
       .accounts({
         authority: wallet.publicKey,
         buffer: bufferKeypair.publicKey,
       } as any)
-      .signers([wallet])
-      .rpc();
+      .instruction();
+    const writeSig = await sendTx(connection, wallet, [writeIx]);
     offset += chunk.length;
     chunkIndex++;
     options?.onProgress?.(chunkIndex, totalChunks, writeSig);
@@ -626,15 +589,15 @@ export async function uploadMemory(
   // ── Step 4: finalize ──────────────────────────────────────────
   if (resolvedMode === "append") {
     // Append: realloc existing memory in-place, no new account needed
-    return program.methods
+    const appendIx = await program.methods
       .finalizeMemoryAppend(agentId)
       .accounts({
         authority: wallet.publicKey,
         buffer: bufferKeypair.publicKey,
         memory: existingMemory,
       } as any)
-      .signers([wallet])
-      .rpc();
+      .instruction();
+    return sendTx(connection, wallet, [appendIx]);
   }
 
   // new / update: create a new memory account
@@ -642,19 +605,17 @@ export async function uploadMemory(
   const memorySize = MEMORY_HEADER_SIZE + totalLen;
   const memoryRent = await connection.getMinimumBalanceForRentExemption(memorySize);
 
-  const createMemoryTx = new anchor.web3.Transaction().add(
-    SystemProgram.createAccount({
-      fromPubkey: wallet.publicKey,
-      newAccountPubkey: memoryKeypair.publicKey,
-      lamports: memoryRent,
-      space: memorySize,
-      programId: program.programId,
-    })
-  );
-  await sendAndConfirmTx(connection, createMemoryTx, [wallet, memoryKeypair]);
+  const createMemoryIx = SystemProgram.createAccount({
+    fromPubkey: wallet.publicKey,
+    newAccountPubkey: memoryKeypair.publicKey,
+    lamports: memoryRent,
+    space: memorySize,
+    programId: program.programId,
+  });
+  await sendTx(connection, wallet, [createMemoryIx], [memoryKeypair]);
 
   if (resolvedMode === "update") {
-    return program.methods
+    const updateIx = await program.methods
       .finalizeMemoryUpdate(agentId)
       .accounts({
         authority: wallet.publicKey,
@@ -662,19 +623,19 @@ export async function uploadMemory(
         newMemory: memoryKeypair.publicKey,
         oldMemory: existingMemory,
       } as any)
-      .signers([wallet])
-      .rpc();
+      .instruction();
+    return sendTx(connection, wallet, [updateIx]);
   } else {
     // "new"
-    return program.methods
+    const newIx = await program.methods
       .finalizeMemoryNew(agentId)
       .accounts({
         authority: wallet.publicKey,
         buffer: bufferKeypair.publicKey,
         newMemory: memoryKeypair.publicKey,
       } as any)
-      .signers([wallet])
-      .rpc();
+      .instruction();
+    return sendTx(connection, wallet, [newIx]);
   }
 }
 
@@ -692,11 +653,11 @@ export async function closeBuffer(
   if (!record.pendingBuffer) {
     throw new Error(`Agent "${agentId}" has no pending buffer`);
   }
-  return program.methods
+  const ix = await program.methods
     .closeBuffer(agentId)
     .accounts({ authority: wallet.publicKey, buffer: record.pendingBuffer } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }
 
 // ─── Activity Logging ───────────────────────────────────────────
@@ -719,15 +680,15 @@ export async function logActivity(
     pointMint, wallet.publicKey, true, TOKEN_2022_PROGRAM_ID
   );
 
-  return program.methods
+  const ix = await program.methods
     .logActivity(agentId, model, activity, log)
     .accounts({
       authority: wallet.publicKey,
       authorityPointAccount,
       instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
     } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }
 
 /**
@@ -757,7 +718,7 @@ export async function logActivityWithReferral(
     refereeActivityMint, referralAuthority, true, TOKEN_2022_PROGRAM_ID
   );
 
-  return program.methods
+  const ix = await program.methods
     .logActivityWithReferral(agentId, model, activity, log)
     .accounts({
       authority: wallet.publicKey,
@@ -768,8 +729,8 @@ export async function logActivityWithReferral(
       referralRefereeActivityAccount,
       instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
     } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }
 
 /**
@@ -870,7 +831,7 @@ export async function setReferral(
     refereeMint, referralAuthority, true, TOKEN_2022_PROGRAM_ID
   );
 
-  return program.methods
+  const ix = await program.methods
     .setReferral(agentId)
     .accounts({
       authority: wallet.publicKey,
@@ -878,8 +839,8 @@ export async function setReferral(
       referralAuthority,
       referralRefereeAccount,
     } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }
 
 // ─── Admin functions ────────────────────────────────────────────
@@ -894,11 +855,11 @@ export async function initConfig(
   options?: AgentRegistryOptions
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
-  return program.methods
+  const ix = await program.methods
     .initConfig()
     .accounts({ admin: wallet.publicKey } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }
 
 /**
@@ -911,11 +872,11 @@ export async function updateAdmin(
   options?: AgentRegistryOptions
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
-  return program.methods
+  const ix = await program.methods
     .updateAdmin(newAdmin)
     .accounts({ admin: wallet.publicKey } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }
 
 /**
@@ -928,11 +889,11 @@ export async function updateFeeRecipient(
   options?: AgentRegistryOptions
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
-  return program.methods
+  const ix = await program.methods
     .updateFeeRecipient(newRecipient)
     .accounts({ admin: wallet.publicKey } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }
 
 /**
@@ -946,11 +907,11 @@ export async function updateRegisterFee(
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
   const fee = typeof newFee === "number" ? new anchor.BN(newFee) : newFee;
-  return program.methods
+  const ix = await program.methods
     .updateRegisterFee(fee)
     .accounts({ admin: wallet.publicKey } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }
 
 /**
@@ -967,11 +928,11 @@ export async function updatePointsConfig(
   const program = createProgram(connection, wallet, options?.programId);
   const ps = typeof pointsSelf === "number" ? new anchor.BN(pointsSelf) : pointsSelf;
   const pr = typeof pointsReferral === "number" ? new anchor.BN(pointsReferral) : pointsReferral;
-  return program.methods
+  const ix = await program.methods
     .updatePointsConfig(ps, pr)
     .accounts({ admin: wallet.publicKey } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }
 
 /**
@@ -992,11 +953,11 @@ export async function updateReferralConfig(
   const fee = typeof referralRegisterFee === "number" ? new anchor.BN(referralRegisterFee) : referralRegisterFee;
   const share = typeof referralFeeShare === "number" ? new anchor.BN(referralFeeShare) : referralFeeShare;
   const pts = typeof referralRegisterPoints === "number" ? new anchor.BN(referralRegisterPoints) : referralRegisterPoints;
-  return program.methods
+  const ix = await program.methods
     .updateReferralConfig(fee, share, pts)
     .accounts({ admin: wallet.publicKey } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }
 
 /**
@@ -1014,9 +975,9 @@ export async function updateActivityConfig(
   const program = createProgram(connection, wallet, options?.programId);
   const ar = typeof activityReward === "number" ? new anchor.BN(activityReward) : activityReward;
   const rar = typeof referralActivityReward === "number" ? new anchor.BN(referralActivityReward) : referralActivityReward;
-  return program.methods
+  const ix = await program.methods
     .updateActivityConfig(ar, rar)
     .accounts({ admin: wallet.publicKey } as any)
-    .signers([wallet])
-    .rpc();
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }

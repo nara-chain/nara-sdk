@@ -37,3 +37,10 @@ export const DEFAULT_ZKID_PROGRAM_ID =
  */
 export const DEFAULT_AGENT_REGISTRY_PROGRAM_ID =
   process.env.AGENT_REGISTRY_PROGRAM_ID || "AgentRegistry111111111111111111111111111111";
+
+/**
+ * Address Lookup Table address for transaction optimization.
+ * When set, all SDK transactions use VersionedTransaction with this ALT.
+ * When empty, uses legacy transactions.
+ */
+export const DEFAULT_ALT_ADDRESS = process.env.ALT_ADDRESS || "";

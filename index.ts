@@ -14,7 +14,11 @@ export {
   DEFAULT_SKILLS_PROGRAM_ID,
   DEFAULT_ZKID_PROGRAM_ID,
   DEFAULT_AGENT_REGISTRY_PROGRAM_ID,
+  DEFAULT_ALT_ADDRESS,
 } from "./src/constants";
+
+// Export transaction helper
+export { sendTx, setAltAddress, getAltAddress } from "./src/tx";
 
 // Export quest functions and types
 export {
