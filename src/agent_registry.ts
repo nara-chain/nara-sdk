@@ -998,3 +998,25 @@ export async function updateReferralConfig(
     .signers([wallet])
     .rpc();
 }
+
+/**
+ * Update the activity reward configuration (admin-only).
+ * @param activityReward - Points awarded per activity
+ * @param referralActivityReward - Points awarded to referrer per activity
+ */
+export async function updateActivityConfig(
+  connection: Connection,
+  wallet: Keypair,
+  activityReward: number | anchor.BN,
+  referralActivityReward: number | anchor.BN,
+  options?: AgentRegistryOptions
+): Promise<string> {
+  const program = createProgram(connection, wallet, options?.programId);
+  const ar = typeof activityReward === "number" ? new anchor.BN(activityReward) : activityReward;
+  const rar = typeof referralActivityReward === "number" ? new anchor.BN(referralActivityReward) : referralActivityReward;
+  return program.methods
+    .updateActivityConfig(ar, rar)
+    .accounts({ admin: wallet.publicKey } as any)
+    .signers([wallet])
+    .rpc();
+}

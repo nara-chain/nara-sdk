@@ -210,6 +210,216 @@ export type NaraQuest = {
       "args": []
     },
     {
+      "name": "setMaxRewardCount",
+      "discriminator": [
+        247,
+        62,
+        67,
+        243,
+        249,
+        243,
+        102,
+        62
+      ],
+      "accounts": [
+        {
+          "name": "gameConfig",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  113,
+                  117,
+                  101,
+                  115,
+                  116,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "maxRewardCount",
+          "type": "u32"
+        }
+      ]
+    },
+    {
+      "name": "setMinRewardCount",
+      "discriminator": [
+        108,
+        213,
+        24,
+        47,
+        93,
+        149,
+        58,
+        4
+      ],
+      "accounts": [
+        {
+          "name": "gameConfig",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  113,
+                  117,
+                  101,
+                  115,
+                  116,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "minRewardCount",
+          "type": "u32"
+        }
+      ]
+    },
+    {
+      "name": "stake",
+      "discriminator": [
+        206,
+        176,
+        202,
+        18,
+        200,
+        209,
+        179,
+        108
+      ],
+      "accounts": [
+        {
+          "name": "pool",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  113,
+                  117,
+                  101,
+                  115,
+                  116,
+                  95,
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "stakeRecord",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  113,
+                  117,
+                  101,
+                  115,
+                  116,
+                  95,
+                  115,
+                  116,
+                  97,
+                  107,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "stakeVault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  113,
+                  117,
+                  101,
+                  115,
+                  116,
+                  95,
+                  115,
+                  116,
+                  97,
+                  107,
+                  101,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "submitAnswer",
       "discriminator": [
         221,
@@ -265,6 +475,34 @@ export type NaraQuest = {
                   110,
                   101,
                   114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "stakeRecord",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  113,
+                  117,
+                  101,
+                  115,
+                  116,
+                  95,
+                  115,
+                  116,
+                  97,
+                  107,
+                  101
                 ]
               },
               {
@@ -399,6 +637,116 @@ export type NaraQuest = {
           "type": "pubkey"
         }
       ]
+    },
+    {
+      "name": "unstake",
+      "discriminator": [
+        90,
+        95,
+        107,
+        42,
+        205,
+        124,
+        50,
+        225
+      ],
+      "accounts": [
+        {
+          "name": "pool",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  113,
+                  117,
+                  101,
+                  115,
+                  116,
+                  95,
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "stakeRecord",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  113,
+                  117,
+                  101,
+                  115,
+                  116,
+                  95,
+                  115,
+                  116,
+                  97,
+                  107,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "stakeVault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  113,
+                  117,
+                  101,
+                  115,
+                  116,
+                  95,
+                  115,
+                  116,
+                  97,
+                  107,
+                  101,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
     }
   ],
   "accounts": [
@@ -426,6 +774,19 @@ export type NaraQuest = {
         177,
         109,
         188
+      ]
+    },
+    {
+      "name": "stakeRecord",
+      "discriminator": [
+        174,
+        163,
+        11,
+        208,
+        150,
+        236,
+        11,
+        205
       ]
     },
     {
@@ -497,6 +858,26 @@ export type NaraQuest = {
       "code": 6007,
       "name": "alreadyAnswered",
       "msg": "Already answered this round"
+    },
+    {
+      "code": 6008,
+      "name": "invalidMinRewardCount",
+      "msg": "min_reward_count must be > 0 and <= max_reward_count"
+    },
+    {
+      "code": 6009,
+      "name": "invalidMaxRewardCount",
+      "msg": "max_reward_count must be >= min_reward_count"
+    },
+    {
+      "code": 6010,
+      "name": "unstakeNotReady",
+      "msg": "Cannot unstake until round advances or deadline passes"
+    },
+    {
+      "code": 6011,
+      "name": "insufficientStakeBalance",
+      "msg": "Unstake amount exceeds staked balance"
     }
   ],
   "types": [
@@ -540,6 +921,14 @@ export type NaraQuest = {
           {
             "name": "authority",
             "type": "pubkey"
+          },
+          {
+            "name": "minRewardCount",
+            "type": "u32"
+          },
+          {
+            "name": "maxRewardCount",
+            "type": "u32"
           },
           {
             "name": "padding",
@@ -598,6 +987,39 @@ export type NaraQuest = {
           {
             "name": "difficulty",
             "type": "u32"
+          },
+          {
+            "name": "stakeRequirement",
+            "type": "u64"
+          },
+          {
+            "name": "minWinnerStake",
+            "type": "u64"
+          },
+          {
+            "name": "padding",
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "stakeRecord",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "stakeRound",
+            "type": "u64"
           },
           {
             "name": "padding",

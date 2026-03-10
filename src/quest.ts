@@ -49,6 +49,17 @@ export interface QuestInfo {
   deadline: number;
   timeRemaining: number;
   expired: boolean;
+  /** Minimum stake required to submit an answer (in NARA) */
+  stakeRequirement: number;
+  /** Minimum stake to be eligible for rewards (in NARA) */
+  minWinnerStake: number;
+}
+
+export interface StakeInfo {
+  /** Current staked amount (in NARA) */
+  amount: number;
+  /** Round when the stake was made */
+  stakeRound: number;
 }
 
 export interface ZkProof {
@@ -77,6 +88,8 @@ export interface QuestOptions {
   circuitWasmPath?: string | Uint8Array;
   /** File path (Node.js), URL string, or pre-loaded Uint8Array (browser) */
   zkeyPath?: string | Uint8Array;
+  /** "auto" = auto top-up stake to stakeRequirement; number = stake exact NARA amount */
+  stake?: "auto" | number;
 }
 
 export interface ActivityLog {
@@ -211,6 +224,25 @@ function getWinnerRecordPda(
   return pda;
 }
 
+function getStakeRecordPda(
+  programId: PublicKey,
+  user: PublicKey
+): PublicKey {
+  const [pda] = PublicKey.findProgramAddressSync(
+    [new TextEncoder().encode("quest_stake"), user.toBytes()],
+    programId
+  );
+  return pda;
+}
+
+function getStakeVaultPda(programId: PublicKey): PublicKey {
+  const [pda] = PublicKey.findProgramAddressSync(
+    [new TextEncoder().encode("quest_stake_vault")],
+    programId
+  );
+  return pda;
+}
+
 // ─── SDK functions ───────────────────────────────────────────────
 
 /**
@@ -246,6 +278,8 @@ export async function getQuestInfo(
     deadline,
     timeRemaining: secsLeft,
     expired: secsLeft <= 0,
+    stakeRequirement: pool.stakeRequirement.toNumber() / LAMPORTS_PER_SOL,
+    minWinnerStake: pool.minWinnerStake.toNumber() / LAMPORTS_PER_SOL,
   };
 }
 
@@ -332,31 +366,66 @@ export async function submitAnswer(
 ): Promise<SubmitAnswerResult> {
   const program = createProgram(connection, wallet, options?.programId);
 
-  if (activityLog) {
-    const { makeLogActivityIx, makeLogActivityWithReferralIx } = await import("./agent_registry");
+  // Build optional stake instruction
+  let stakeIx: any = null;
+  if (options?.stake !== undefined) {
+    let stakeLamports: BN;
+    if (options.stake === "auto") {
+      const quest = await getQuestInfo(connection, wallet, options);
+      const stakeInfo = await getStakeInfo(connection, wallet.publicKey, options);
+      const required = quest.stakeRequirement;
+      const current = stakeInfo?.amount ?? 0;
+      const deficit = required - current;
+      if (deficit > 0) {
+        stakeLamports = new BN(Math.round(deficit * LAMPORTS_PER_SOL));
+      } else {
+        stakeLamports = new BN(0);
+      }
+    } else {
+      stakeLamports = new BN(Math.round(options.stake * LAMPORTS_PER_SOL));
+    }
+    if (!stakeLamports.isZero()) {
+      stakeIx = await program.methods
+        .stake(stakeLamports)
+        .accounts({ user: wallet.publicKey } as any)
+        .instruction();
+    }
+  }
+
+  // If we need a composite transaction (stake and/or activityLog)
+  if (stakeIx || activityLog) {
     const submitIx = await program.methods
       .submitAnswer(proof.proofA as any, proof.proofB as any, proof.proofC as any, agent, model)
       .accounts({ user: wallet.publicKey, payer: wallet.publicKey })
       .instruction();
-    const logIx = activityLog.referralAgentId
-      ? await makeLogActivityWithReferralIx(
-          connection,
-          wallet.publicKey,
-          activityLog.agentId,
-          activityLog.model,
-          activityLog.activity,
-          activityLog.log,
-          activityLog.referralAgentId
-        )
-      : await makeLogActivityIx(
-          connection,
-          wallet.publicKey,
-          activityLog.agentId,
-          activityLog.model,
-          activityLog.activity,
-          activityLog.log
-        );
-    const tx = new Transaction().add(submitIx).add(logIx);
+
+    const tx = new Transaction();
+    if (stakeIx) tx.add(stakeIx);
+    tx.add(submitIx);
+
+    if (activityLog) {
+      const { makeLogActivityIx, makeLogActivityWithReferralIx } = await import("./agent_registry");
+      const logIx = activityLog.referralAgentId
+        ? await makeLogActivityWithReferralIx(
+            connection,
+            wallet.publicKey,
+            activityLog.agentId,
+            activityLog.model,
+            activityLog.activity,
+            activityLog.log,
+            activityLog.referralAgentId
+          )
+        : await makeLogActivityIx(
+            connection,
+            wallet.publicKey,
+            activityLog.agentId,
+            activityLog.model,
+            activityLog.activity,
+            activityLog.log
+          );
+      tx.add(logIx);
+    }
+
     tx.feePayer = wallet.publicKey;
     tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
     tx.sign(wallet);
@@ -470,6 +539,68 @@ export async function computeAnswerHash(answer: string): Promise<number[]> {
 }
 
 /**
+ * Stake NARA to participate in quests.
+ *
+ * @param amount - Amount to stake in NARA
+ */
+export async function stake(
+  connection: Connection,
+  wallet: Keypair,
+  amount: number,
+  options?: QuestOptions
+): Promise<string> {
+  const program = createProgram(connection, wallet, options?.programId);
+  const lamports = new BN(Math.round(amount * LAMPORTS_PER_SOL));
+  return program.methods
+    .stake(lamports)
+    .accounts({ user: wallet.publicKey } as any)
+    .signers([wallet])
+    .rpc();
+}
+
+/**
+ * Unstake NARA. Can only unstake after the round advances or deadline passes.
+ *
+ * @param amount - Amount to unstake in NARA
+ */
+export async function unstake(
+  connection: Connection,
+  wallet: Keypair,
+  amount: number,
+  options?: QuestOptions
+): Promise<string> {
+  const program = createProgram(connection, wallet, options?.programId);
+  const lamports = new BN(Math.round(amount * LAMPORTS_PER_SOL));
+  return program.methods
+    .unstake(lamports)
+    .accounts({ user: wallet.publicKey } as any)
+    .signers([wallet])
+    .rpc();
+}
+
+/**
+ * Get stake info for a user. Returns null if no stake record exists.
+ */
+export async function getStakeInfo(
+  connection: Connection,
+  user: PublicKey,
+  options?: QuestOptions
+): Promise<StakeInfo | null> {
+  const kp = Keypair.generate();
+  const program = createProgram(connection, kp, options?.programId);
+  const stakeRecordPda = getStakeRecordPda(program.programId, user);
+  try {
+    const record = await program.account.stakeRecord.fetch(stakeRecordPda);
+    return {
+      amount: record.amount.toNumber() / LAMPORTS_PER_SOL,
+      stakeRound: record.stakeRound.toNumber(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Create a new quest question on-chain (authority only).
  *
  * @param connection - Solana connection
@@ -503,4 +634,95 @@ export async function createQuestion(
     .rpc();
 
   return signature;
+}
+
+// ─── Admin functions ───────────────────────────────────────────────
+
+/**
+ * Initialize the quest program (one-time setup). The caller becomes the authority.
+ */
+export async function initializeQuest(
+  connection: Connection,
+  wallet: Keypair,
+  options?: QuestOptions
+): Promise<string> {
+  const program = createProgram(connection, wallet, options?.programId);
+  return program.methods
+    .initialize()
+    .accounts({ authority: wallet.publicKey } as any)
+    .signers([wallet])
+    .rpc();
+}
+
+/**
+ * Set the maximum reward count (authority only).
+ */
+export async function setMaxRewardCount(
+  connection: Connection,
+  wallet: Keypair,
+  maxRewardCount: number,
+  options?: QuestOptions
+): Promise<string> {
+  const program = createProgram(connection, wallet, options?.programId);
+  return program.methods
+    .setMaxRewardCount(maxRewardCount)
+    .accounts({ authority: wallet.publicKey } as any)
+    .signers([wallet])
+    .rpc();
+}
+
+/**
+ * Set the minimum reward count (authority only).
+ */
+export async function setMinRewardCount(
+  connection: Connection,
+  wallet: Keypair,
+  minRewardCount: number,
+  options?: QuestOptions
+): Promise<string> {
+  const program = createProgram(connection, wallet, options?.programId);
+  return program.methods
+    .setMinRewardCount(minRewardCount)
+    .accounts({ authority: wallet.publicKey } as any)
+    .signers([wallet])
+    .rpc();
+}
+
+/**
+ * Transfer quest program authority to a new address (authority only).
+ */
+export async function transferQuestAuthority(
+  connection: Connection,
+  wallet: Keypair,
+  newAuthority: PublicKey,
+  options?: QuestOptions
+): Promise<string> {
+  const program = createProgram(connection, wallet, options?.programId);
+  return program.methods
+    .transferAuthority(newAuthority)
+    .accounts({ authority: wallet.publicKey } as any)
+    .signers([wallet])
+    .rpc();
+}
+
+/**
+ * Get quest program config (authority, min/max reward count).
+ */
+export async function getQuestConfig(
+  connection: Connection,
+  options?: QuestOptions
+): Promise<{ authority: PublicKey; minRewardCount: number; maxRewardCount: number }> {
+  const kp = Keypair.generate();
+  const program = createProgram(connection, kp, options?.programId);
+  const programId = new PublicKey(options?.programId ?? DEFAULT_QUEST_PROGRAM_ID);
+  const [configPda] = PublicKey.findProgramAddressSync(
+    [new TextEncoder().encode("quest_config")],
+    programId
+  );
+  const config = await program.account.gameConfig.fetch(configPda);
+  return {
+    authority: config.authority,
+    minRewardCount: config.minRewardCount,
+    maxRewardCount: config.maxRewardCount,
+  };
 }
