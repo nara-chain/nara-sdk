@@ -278,8 +278,8 @@ export async function getQuestInfo(
     deadline,
     timeRemaining: secsLeft,
     expired: secsLeft <= 0,
-    stakeRequirement: pool.stakeRequirement.toNumber() / LAMPORTS_PER_SOL,
-    minWinnerStake: pool.minWinnerStake.toNumber() / LAMPORTS_PER_SOL,
+    stakeRequirement: Number(pool.stakeRequirement.toString()) / LAMPORTS_PER_SOL,
+    minWinnerStake: Number(pool.minWinnerStake.toString()) / LAMPORTS_PER_SOL,
   };
 }
 
