@@ -1,8 +1,8 @@
 /**
  * Shared transaction sending utility with optional Address Lookup Table support.
  *
- * When DEFAULT_ALT_ADDRESS is set, transactions are sent as VersionedTransaction
- * with the ALT for smaller on-chain size. Otherwise, legacy Transaction is used.
+ * When ALT addresses are configured, transactions are sent as VersionedTransaction
+ * with ALTs for smaller on-chain size. Otherwise, legacy Transaction is used.
  */
 
 import {
@@ -18,44 +18,63 @@ import {
 } from "@solana/web3.js";
 import { DEFAULT_ALT_ADDRESS } from "./constants";
 
-let _cachedAlt: AddressLookupTableAccount | null = null;
-let _cachedAltAddress: string = "";
-let _overrideAltAddress: string | null = null;
+let _cachedAlts: AddressLookupTableAccount[] = [];
+let _cachedAltKey: string = "";
+let _overrideAltAddresses: string[] | null = null;
 
 /**
- * Set a global ALT address at runtime (overrides DEFAULT_ALT_ADDRESS / env).
- * Pass empty string or null to disable ALT.
+ * Set global ALT addresses at runtime (overrides DEFAULT_ALT_ADDRESS / env).
+ * Pass empty array or null to disable ALT.
  */
-export function setAltAddress(address: string | null): void {
-  _overrideAltAddress = address;
-  // Invalidate cache when address changes
-  _cachedAlt = null;
-  _cachedAltAddress = "";
-}
-
-/**
- * Get the current effective ALT address.
- */
-export function getAltAddress(): string {
-  return _overrideAltAddress ?? DEFAULT_ALT_ADDRESS;
-}
-
-async function loadAlt(
-  connection: Connection
-): Promise<AddressLookupTableAccount | null> {
-  const addr = getAltAddress();
-  if (!addr) return null;
-
-  // Cache the ALT account to avoid repeated fetches
-  if (_cachedAlt && _cachedAltAddress === addr) return _cachedAlt;
-
-  const result = await connection.getAddressLookupTable(new PublicKey(addr));
-  if (!result.value) {
-    throw new Error(`Address Lookup Table not found: ${addr}`);
+export function setAltAddress(addresses: string | string[] | null): void {
+  if (addresses === null) {
+    _overrideAltAddresses = [];
+  } else if (typeof addresses === "string") {
+    _overrideAltAddresses = addresses ? [addresses] : [];
+  } else {
+    _overrideAltAddresses = addresses.filter(Boolean);
   }
-  _cachedAlt = result.value;
-  _cachedAltAddress = addr;
-  return _cachedAlt;
+  // Invalidate cache when addresses change
+  _cachedAlts = [];
+  _cachedAltKey = "";
+}
+
+/**
+ * Get the current effective ALT addresses.
+ */
+export function getAltAddress(): string[] {
+  if (_overrideAltAddresses !== null) return _overrideAltAddresses;
+  if (!DEFAULT_ALT_ADDRESS) return [];
+  // env supports comma-separated list
+  return DEFAULT_ALT_ADDRESS.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+async function loadAlts(
+  connection: Connection
+): Promise<AddressLookupTableAccount[]> {
+  const addrs = getAltAddress();
+  if (!addrs.length) return [];
+
+  const key = addrs.join(",");
+  if (_cachedAlts.length && _cachedAltKey === key) return _cachedAlts;
+
+  const results: AddressLookupTableAccount[] = [];
+  for (const addr of addrs) {
+    try {
+      const result = await connection.getAddressLookupTable(new PublicKey(addr));
+      if (result.value) {
+        results.push(result.value);
+      } else {
+        console.warn(`[nara-sdk] ALT not found: ${addr}, skipping`);
+      }
+    } catch (e) {
+      console.warn(`[nara-sdk] Failed to load ALT ${addr}: ${e}, skipping`);
+    }
+  }
+
+  _cachedAlts = results;
+  _cachedAltKey = key;
+  return _cachedAlts;
 }
 
 /**
@@ -75,7 +94,7 @@ export async function getRecentPriorityFee(
 
 /**
  * Send a transaction with optional ALT support.
- * If DEFAULT_ALT_ADDRESS is configured, uses VersionedTransaction.
+ * If ALT addresses are configured, uses VersionedTransaction.
  * Otherwise, uses legacy Transaction.
  *
  * opts.computeUnitLimit - set CU limit (ComputeBudgetProgram.setComputeUnitLimit)
@@ -113,18 +132,18 @@ export async function sendTx(
   }
   const allInstructions = [...budgetIxs, ...instructions];
 
-  const alt = await loadAlt(connection);
+  const alts = await loadAlts(connection);
   const { blockhash, lastValidBlockHeight } =
     await connection.getLatestBlockhash("confirmed");
 
   let signature: string;
 
-  if (alt) {
+  if (alts.length) {
     const message = new TransactionMessage({
       payerKey: payer.publicKey,
       recentBlockhash: blockhash,
       instructions: allInstructions,
-    }).compileToV0Message([alt]);
+    }).compileToV0Message(alts);
 
     const tx = new VersionedTransaction(message);
     const allSigners = [payer, ...(signers ?? [])];

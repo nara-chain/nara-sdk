@@ -39,8 +39,9 @@ export const DEFAULT_AGENT_REGISTRY_PROGRAM_ID =
   process.env.AGENT_REGISTRY_PROGRAM_ID || "AgentRegistry111111111111111111111111111111";
 
 /**
- * Address Lookup Table address for transaction optimization.
- * When set, all SDK transactions use VersionedTransaction with this ALT.
+ * Address Lookup Table addresses for transaction optimization.
+ * Supports comma-separated list for multiple ALTs.
+ * When set, all SDK transactions use VersionedTransaction with these ALTs.
  * When empty, uses legacy transactions.
  */
-export const DEFAULT_ALT_ADDRESS = process.env.ALT_ADDRESS || "";
+export const DEFAULT_ALT_ADDRESS = process.env.ALT_ADDRESS || "7u3uwQof8YnTrdYE2ZXgAYQLsDxW9cEJjqC3zJHrZXGo";

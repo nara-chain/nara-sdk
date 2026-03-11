@@ -82,9 +82,9 @@ async function main() {
   const connection = new Connection(rpcUrl, "confirmed");
 
   console.log("Main wallet:", mainWallet.publicKey.toBase58());
-  const altAddr = getAltAddress();
-  if (altAddr) {
-    console.log(`ALT enabled: ${altAddr}`);
+  const altAddrs = getAltAddress();
+  if (altAddrs.length) {
+    console.log(`ALT enabled: ${altAddrs.join(", ")}`);
   } else {
     console.log("ALT: disabled (using legacy transactions)");
   }
