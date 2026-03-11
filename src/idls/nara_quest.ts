@@ -316,7 +316,7 @@ export type NaraQuest = {
           "type": "u64"
         },
         {
-          "name": "decaySeconds",
+          "name": "decayMs",
           "type": "i64"
         }
       ]
@@ -1316,7 +1316,7 @@ export type NaraQuest = {
             "type": "u64"
           },
           {
-            "name": "decaySeconds",
+            "name": "decayMs",
             "type": "i64"
           },
           {

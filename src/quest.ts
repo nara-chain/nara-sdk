@@ -251,20 +251,20 @@ function getStakeTokenAccount(stakeRecordPda: PublicKey): PublicKey {
 /**
  * Compute the effective stake requirement using the parabolic decay formula.
  * effective = stakeHigh - (stakeHigh - stakeLow) * (elapsed / decay)^2
- * All amounts in NARA (not lamports).
+ * All amounts in NARA (not lamports). Times in milliseconds.
  */
 function computeEffectiveStake(
   stakeHigh: number,
   stakeLow: number,
   createdAt: number,
-  decaySeconds: number,
-  now: number
+  decayMs: number,
+  nowMs: number
 ): number {
-  if (decaySeconds <= 0) return stakeLow;
-  const elapsed = now - createdAt;
-  if (elapsed >= decaySeconds) return stakeLow;
+  if (decayMs <= 0) return stakeLow;
+  const elapsedMs = nowMs - createdAt;
+  if (elapsedMs >= decayMs) return stakeLow;
   const range = stakeHigh - stakeLow;
-  const ratio = elapsed / decaySeconds;
+  const ratio = elapsedMs / decayMs;
   return stakeHigh - range * ratio * ratio;
 }
 
@@ -293,17 +293,20 @@ export async function getQuestInfo(
   const stakeLow = Number(pool.stakeLow.toString()) / LAMPORTS_PER_SOL;
   const createdAt = pool.createdAt.toNumber();
 
-  // Fetch decay_seconds from GameConfig for effective calculation
+  // Fetch decayMs from GameConfig for effective calculation
   const programId = new PublicKey(options?.programId ?? DEFAULT_QUEST_PROGRAM_ID);
   const [configPda] = PublicKey.findProgramAddressSync(
     [new TextEncoder().encode("quest_config")],
     programId
   );
   const config = await program.account.gameConfig.fetch(configPda);
-  const decaySeconds = config.decaySeconds.toNumber();
+  const decayMs = Number(config.decayMs.toString());
 
+  // createdAt is unix timestamp (seconds), convert to ms for decay calculation
+  const nowMs = Date.now();
+  const createdAtMs = createdAt * 1000;
   const effectiveStakeRequirement = computeEffectiveStake(
-    stakeHigh, stakeLow, createdAt, decaySeconds, now
+    stakeHigh, stakeLow, createdAtMs, decayMs, nowMs
   );
 
   return {
@@ -716,19 +719,19 @@ export async function setRewardConfig(
  * Set the stake config (authority only).
  * @param bpsHigh - Upper bound multiplier in basis points (e.g. 100000 = 10x average)
  * @param bpsLow - Lower bound multiplier in basis points (e.g. 1000 = 0.1x average)
- * @param decaySeconds - Time window for parabolic decay from high to low
+ * @param decayMs - Time window in milliseconds for parabolic decay from high to low
  */
 export async function setStakeConfig(
   connection: Connection,
   wallet: Keypair,
   bpsHigh: number,
   bpsLow: number,
-  decaySeconds: number,
+  decayMs: number,
   options?: QuestOptions
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
   const ix = await program.methods
-    .setStakeConfig(new BN(bpsHigh), new BN(bpsLow), new BN(decaySeconds))
+    .setStakeConfig(new BN(bpsHigh), new BN(bpsLow), new BN(decayMs))
     .accounts({ authority: wallet.publicKey } as any)
     .instruction();
   return sendTx(connection, wallet, [ix]);
@@ -763,7 +766,7 @@ export async function getQuestConfig(
   maxRewardCount: number;
   stakeBpsHigh: number;
   stakeBpsLow: number;
-  decaySeconds: number;
+  decayMs: number;
 }> {
   const kp = Keypair.generate();
   const program = createProgram(connection, kp, options?.programId);
@@ -779,6 +782,6 @@ export async function getQuestConfig(
     maxRewardCount: config.maxRewardCount,
     stakeBpsHigh: Number(config.stakeBpsHigh.toString()),
     stakeBpsLow: Number(config.stakeBpsLow.toString()),
-    decaySeconds: config.decaySeconds.toNumber(),
+    decayMs: Number(config.decayMs.toString()),
   };
 }
