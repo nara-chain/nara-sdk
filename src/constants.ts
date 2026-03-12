@@ -44,4 +44,4 @@ export const DEFAULT_AGENT_REGISTRY_PROGRAM_ID =
  * When set, all SDK transactions use VersionedTransaction with these ALTs.
  * When empty, uses legacy transactions.
  */
-export const DEFAULT_ALT_ADDRESS = process.env.ALT_ADDRESS || "7u3uwQof8YnTrdYE2ZXgAYQLsDxW9cEJjqC3zJHrZXGo";
+export const DEFAULT_ALT_ADDRESS = process.env.ALT_ADDRESS || "G3vhs4TbRpuXt3coHzXpuiTnq15rnVehr5bRVR18Y5Ku";
