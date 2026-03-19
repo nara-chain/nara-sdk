@@ -32,6 +32,7 @@ export {
   submitAnswerViaRelay,
   parseQuestReward,
   computeAnswerHash,
+  makeCreateQuestionIx,
   createQuestion,
   stake,
   unstake,

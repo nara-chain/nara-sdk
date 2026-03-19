@@ -646,6 +646,37 @@ export async function getStakeInfo(
 }
 
 /**
+ * Build a createQuestion instruction (does not send).
+ *
+ * @param connection - Solana connection
+ * @param caller - Authority public key (must be the program authority or quest_authority)
+ * @param question - The question text
+ * @param answer - The answer string (will be hashed with Poseidon + answerToField)
+ * @param deadlineSeconds - Duration in seconds from now until the deadline
+ * @param difficulty - Difficulty level (default: 1)
+ * @param options - Optional program ID override
+ */
+export async function makeCreateQuestionIx(
+  connection: Connection,
+  caller: PublicKey,
+  question: string,
+  answer: string,
+  deadlineSeconds: number,
+  difficulty: number = 1,
+  options?: QuestOptions
+) {
+  const kp = Keypair.generate();
+  const program = createProgram(connection, kp, options?.programId);
+  const answerHash = await computeAnswerHash(answer);
+  const deadline = new BN(Math.floor(Date.now() / 1000) + deadlineSeconds);
+
+  return program.methods
+    .createQuestion(question, answerHash as any, deadline, difficulty)
+    .accounts({ caller } as any)
+    .instruction();
+}
+
+/**
  * Create a new quest question on-chain (authority or quest_authority).
  *
  * @param connection - Solana connection
@@ -665,14 +696,9 @@ export async function createQuestion(
   difficulty: number = 1,
   options?: QuestOptions
 ): Promise<string> {
-  const program = createProgram(connection, wallet, options?.programId);
-  const answerHash = await computeAnswerHash(answer);
-  const deadline = new BN(Math.floor(Date.now() / 1000) + deadlineSeconds);
-
-  const ix = await program.methods
-    .createQuestion(question, answerHash as any, deadline, difficulty)
-    .accounts({ caller: wallet.publicKey } as any)
-    .instruction();
+  const ix = await makeCreateQuestionIx(
+    connection, wallet.publicKey, question, answer, deadlineSeconds, difficulty, options
+  );
   return sendTx(connection, wallet, [ix]);
 }
 
