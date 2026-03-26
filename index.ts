@@ -44,6 +44,8 @@ export {
   setQuestAuthority,
   setQuestInterval,
   setRewardPerShare,
+  setStakeAuthority,
+  adjustFreeStake,
   getQuestConfig,
   type QuestInfo,
   type StakeInfo,

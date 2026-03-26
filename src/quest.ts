@@ -67,6 +67,8 @@ export interface StakeInfo {
   amount: number;
   /** Round when the stake was made */
   stakeRound: number;
+  /** Free stake credits (admin-assigned, bypass stake requirement) */
+  freeCredits: number;
 }
 
 export interface ZkProof {
@@ -639,6 +641,7 @@ export async function getStakeInfo(
     return {
       amount,
       stakeRound: record.stakeRound.toNumber(),
+      freeCredits: record.freeCredits,
     };
   } catch {
     return null;
@@ -849,6 +852,7 @@ export async function getQuestConfig(
   minQuestInterval: number;
   rewardPerShare: number;
   extraReward: number;
+  stakeAuthority: PublicKey;
 }> {
   const kp = Keypair.generate();
   const program = createProgram(connection, kp, options?.programId);
@@ -870,5 +874,45 @@ export async function getQuestConfig(
     minQuestInterval: Number(config.minQuestInterval.toString()),
     rewardPerShare: Number(config.rewardPerShare.toString()),
     extraReward: Number(config.extraReward.toString()),
+    stakeAuthority: config.stakeAuthority,
   };
+}
+
+/**
+ * Set a stake authority that can adjust free stake credits (authority only).
+ */
+export async function setStakeAuthority(
+  connection: Connection,
+  wallet: Keypair,
+  newStakeAuthority: PublicKey,
+  options?: QuestOptions
+): Promise<string> {
+  const program = createProgram(connection, wallet, options?.programId);
+  const ix = await program.methods
+    .setStakeAuthority(newStakeAuthority)
+    .accounts({ authority: wallet.publicKey } as any)
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
+}
+
+/**
+ * Adjust free stake credits for a user (stake_authority or authority only).
+ * @param user - The user whose free credits to adjust
+ * @param delta - Amount to adjust (positive to add, negative to remove)
+ * @param reason - Reason for the adjustment (logged on-chain)
+ */
+export async function adjustFreeStake(
+  connection: Connection,
+  wallet: Keypair,
+  user: PublicKey,
+  delta: number,
+  reason: string,
+  options?: QuestOptions
+): Promise<string> {
+  const program = createProgram(connection, wallet, options?.programId);
+  const ix = await program.methods
+    .adjustFreeStake(delta, reason)
+    .accounts({ user, caller: wallet.publicKey } as any)
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
 }

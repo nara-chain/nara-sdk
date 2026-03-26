@@ -14,6 +14,95 @@ export type NaraQuest = {
   },
   "instructions": [
     {
+      "name": "adjustFreeStake",
+      "discriminator": [
+        21,
+        111,
+        164,
+        64,
+        220,
+        115,
+        26,
+        60
+      ],
+      "accounts": [
+        {
+          "name": "gameConfig",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  113,
+                  117,
+                  101,
+                  115,
+                  116,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "stakeRecord",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  113,
+                  117,
+                  101,
+                  115,
+                  116,
+                  95,
+                  115,
+                  116,
+                  97,
+                  107,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user"
+        },
+        {
+          "name": "caller",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "delta",
+          "type": "i32"
+        },
+        {
+          "name": "reason",
+          "type": "string"
+        }
+      ]
+    },
+    {
       "name": "createQuestion",
       "discriminator": [
         222,
@@ -465,6 +554,56 @@ export type NaraQuest = {
         {
           "name": "extraReward",
           "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "setStakeAuthority",
+      "discriminator": [
+        202,
+        75,
+        225,
+        146,
+        240,
+        65,
+        15,
+        60
+      ],
+      "accounts": [
+        {
+          "name": "gameConfig",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  113,
+                  117,
+                  101,
+                  115,
+                  116,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "newStakeAuthority",
+          "type": "pubkey"
         }
       ]
     },
@@ -1475,6 +1614,16 @@ export type NaraQuest = {
       "code": 6015,
       "name": "invalidRewardPerShare",
       "msg": "Invalid reward config: reward_per_share and extra_reward cannot both be 0"
+    },
+    {
+      "code": 6016,
+      "name": "invalidDelta",
+      "msg": "Delta must not be zero"
+    },
+    {
+      "code": 6017,
+      "name": "freeCreditsOverflow",
+      "msg": "Free credits overflow"
     }
   ],
   "types": [
@@ -1560,11 +1709,15 @@ export type NaraQuest = {
             "type": "u64"
           },
           {
+            "name": "stakeAuthority",
+            "type": "pubkey"
+          },
+          {
             "name": "padding",
             "type": {
               "array": [
                 "u8",
-                64
+                32
               ]
             }
           }
@@ -1655,11 +1808,15 @@ export type NaraQuest = {
             "type": "u64"
           },
           {
+            "name": "freeCredits",
+            "type": "u32"
+          },
+          {
             "name": "padding",
             "type": {
               "array": [
                 "u8",
-                64
+                60
               ]
             }
           }
