@@ -4292,6 +4292,16 @@
       "code": 6041,
       "name": "TweetVerifyAlreadyPending",
       "msg": "Tweet verification already pending"
+    },
+    {
+      "code": 6042,
+      "name": "TwitterHandleAlreadyTaken",
+      "msg": "Twitter handle is already bound to another agent"
+    },
+    {
+      "code": 6043,
+      "name": "TwitterAlreadyVerified",
+      "msg": "Twitter is already verified, unbind first"
     }
   ],
   "types": [

@@ -4298,6 +4298,16 @@ export type NaraAgentRegistry = {
       "code": 6041,
       "name": "tweetVerifyAlreadyPending",
       "msg": "Tweet verification already pending"
+    },
+    {
+      "code": 6042,
+      "name": "twitterHandleAlreadyTaken",
+      "msg": "Twitter handle is already bound to another agent"
+    },
+    {
+      "code": 6043,
+      "name": "twitterAlreadyVerified",
+      "msg": "Twitter is already verified, unbind first"
     }
   ],
   "types": [
