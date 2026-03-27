@@ -94,6 +94,35 @@
           }
         },
         {
+          "name": "tweet_record",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  119,
+                  101,
+                  101,
+                  116,
+                  95,
+                  114,
+                  101,
+                  99,
+                  111,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "tweet_id"
+              }
+            ]
+          }
+        },
+        {
           "name": "authority",
           "writable": true
         },
@@ -305,6 +334,10 @@
         {
           "name": "agent_id",
           "type": "string"
+        },
+        {
+          "name": "tweet_id",
+          "type": "u128"
         }
       ]
     },
@@ -2805,6 +2838,34 @@
           }
         },
         {
+          "name": "tweet_record",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  119,
+                  101,
+                  101,
+                  116,
+                  95,
+                  114,
+                  101,
+                  99,
+                  111,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "tweet_id"
+              }
+            ]
+          }
+        },
+        {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
         }
@@ -2815,8 +2876,8 @@
           "type": "string"
         },
         {
-          "name": "tweet_url",
-          "type": "string"
+          "name": "tweet_id",
+          "type": "u128"
         }
       ]
     },
@@ -4041,6 +4102,19 @@
       ]
     },
     {
+      "name": "TweetRecord",
+      "discriminator": [
+        13,
+        25,
+        5,
+        236,
+        64,
+        149,
+        72,
+        215
+      ]
+    },
+    {
       "name": "TweetVerify",
       "discriminator": [
         6,
@@ -4302,6 +4376,16 @@
       "code": 6043,
       "name": "TwitterAlreadyVerified",
       "msg": "Twitter is already verified, unbind first"
+    },
+    {
+      "code": 6044,
+      "name": "InvalidTweetUrlFormat",
+      "msg": "Invalid tweet URL format"
+    },
+    {
+      "code": 6045,
+      "name": "TweetAlreadyApproved",
+      "msg": "Tweet has already been approved"
     }
   ],
   "types": [
@@ -4665,6 +4749,53 @@
       }
     },
     {
+      "name": "TweetRecord",
+      "docs": [
+        "Records an approved tweet to prevent duplicate submissions.",
+        "Seeds: [SEED_TWEET_RECORD, &tweet_id.to_le_bytes()]"
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c",
+        "packed": true
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "agent",
+            "docs": [
+              "The agent PDA that submitted this tweet"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "approved_at",
+            "docs": [
+              "Unix timestamp when this tweet was approved"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "tweet_id",
+            "docs": [
+              "Tweet ID (Twitter snowflake ID)"
+            ],
+            "type": "u128"
+          },
+          {
+            "name": "_reserved",
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
       "name": "TweetVerify",
       "docs": [
         "Per-agent tweet verification state.",
@@ -4672,7 +4803,8 @@
       ],
       "serialization": "bytemuck",
       "repr": {
-        "kind": "c"
+        "kind": "c",
+        "packed": true
       },
       "type": {
         "kind": "struct",
@@ -4712,30 +4844,18 @@
             "type": "i64"
           },
           {
-            "name": "tweet_url_len",
+            "name": "tweet_id",
             "docs": [
-              "Actual byte length of tweet_url"
+              "Tweet ID (Twitter snowflake ID)"
             ],
-            "type": "u64"
-          },
-          {
-            "name": "tweet_url",
-            "docs": [
-              "Tweet URL (max 256 bytes)"
-            ],
-            "type": {
-              "array": [
-                "u8",
-                256
-              ]
-            }
+            "type": "u128"
           },
           {
             "name": "_reserved",
             "type": {
               "array": [
                 "u8",
-                128
+                256
               ]
             }
           },
@@ -4745,6 +4865,42 @@
               "array": [
                 "u8",
                 128
+              ]
+            }
+          },
+          {
+            "name": "_reserved3",
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          },
+          {
+            "name": "_reserved4",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "_reserved5",
+            "type": {
+              "array": [
+                "u8",
+                16
+              ]
+            }
+          },
+          {
+            "name": "_reserved6",
+            "type": {
+              "array": [
+                "u8",
+                8
               ]
             }
           }

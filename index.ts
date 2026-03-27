@@ -126,6 +126,7 @@ export {
   // Twitter verification
   getAgentTwitter,
   getTweetVerify,
+  getTweetRecord,
   getPendingTwitterVerifications,
   getPendingTweetVerifications,
   setTwitter,
@@ -152,6 +153,7 @@ export {
   type AgentInfo,
   type AgentTwitterInfo,
   type TweetVerifyInfo,
+  type TweetRecordInfo,
   type MemoryMode,
   type AgentRegistryOptions,
 } from "./src/agent_registry";

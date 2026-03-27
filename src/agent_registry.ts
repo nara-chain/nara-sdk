@@ -65,7 +65,13 @@ export interface TweetVerifyInfo {
   status: number;
   submittedAt: number;
   lastRewardedAt: number;
-  tweetUrl: string;
+  tweetId: bigint;
+}
+
+export interface TweetRecordInfo {
+  agent: PublicKey;
+  approvedAt: number;
+  tweetId: bigint;
 }
 
 export type MemoryMode = "new" | "update" | "append" | "auto";
@@ -295,9 +301,8 @@ function parseTweetVerifyData(data: Buffer | Uint8Array): TweetVerifyInfo {
   const status = Number(buf.readBigUInt64LE(offset)); offset += 8;
   const submittedAt = Number(buf.readBigInt64LE(offset)); offset += 8;
   const lastRewardedAt = Number(buf.readBigInt64LE(offset)); offset += 8;
-  const tweetUrlLen = Number(buf.readBigUInt64LE(offset)); offset += 8;
-  const tweetUrl = buf.subarray(offset, offset + tweetUrlLen).toString("utf-8");
-  return { agentId, status, submittedAt, lastRewardedAt, tweetUrl };
+  const tweetId = buf.readBigUInt64LE(offset) | (buf.readBigUInt64LE(offset + 8) << 64n); offset += 16;
+  return { agentId, status, submittedAt, lastRewardedAt, tweetId };
 }
 
 /**
@@ -1214,6 +1219,34 @@ export async function getTweetVerify(
   return parseTweetVerifyData(accountInfo.data);
 }
 
+/**
+ * Read a tweet record by tweet ID.
+ * Returns null if no record exists.
+ */
+export async function getTweetRecord(
+  connection: Connection,
+  tweetId: bigint,
+  options?: AgentRegistryOptions
+): Promise<TweetRecordInfo | null> {
+  const pid = new PublicKey(options?.programId ?? DEFAULT_AGENT_REGISTRY_PROGRAM_ID);
+  const tweetIdBuf = Buffer.alloc(16);
+  tweetIdBuf.writeBigUInt64LE(tweetId & 0xFFFFFFFFFFFFFFFFn, 0);
+  tweetIdBuf.writeBigUInt64LE(tweetId >> 64n, 8);
+  const [pda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("tweet_record"), tweetIdBuf],
+    pid
+  );
+  const accountInfo = await connection.getAccountInfo(pda);
+  if (!accountInfo) return null;
+
+  const buf = Buffer.from(accountInfo.data);
+  let offset = 8; // skip discriminator
+  const agent = new PublicKey(buf.subarray(offset, offset + 32)); offset += 32;
+  const approvedAt = Number(buf.readBigInt64LE(offset)); offset += 8;
+  const recordTweetId = buf.readBigUInt64LE(offset) | (buf.readBigUInt64LE(offset + 8) << 64n);
+  return { agent, approvedAt, tweetId: recordTweetId };
+}
+
 /** Batch getMultipleAccountsInfo in chunks of 100 (RPC limit). */
 async function batchGetMultipleAccounts(
   connection: Connection,
@@ -1329,12 +1362,12 @@ export async function submitTweet(
   connection: Connection,
   wallet: Keypair,
   agentId: string,
-  tweetUrl: string,
+  tweetId: bigint,
   options?: AgentRegistryOptions
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
   const ix = await program.methods
-    .submitTweet(agentId, tweetUrl)
+    .submitTweet(agentId, new anchor.BN(tweetId.toString()))
     .accounts({ authority: wallet.publicKey } as any)
     .instruction();
   return sendTx(connection, wallet, [ix]);
@@ -1370,7 +1403,7 @@ export async function verifyTwitter(
   username: string,
   options?: AgentRegistryOptions,
   freeStakeDelta?: number,
-  tweetUrl?: string
+  freeStakeReason?: string
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
   const agentPda = getAgentPda(program.programId, agentId);
@@ -1398,7 +1431,7 @@ export async function verifyTwitter(
   if (freeStakeDelta !== undefined && freeStakeDelta !== 0) {
     const { makeAdjustFreeStakeIx } = await import("./quest");
     const freeStakeIx = await makeAdjustFreeStakeIx(
-      connection, wallet.publicKey, authority, freeStakeDelta, tweetUrl ?? ""
+      connection, wallet.publicKey, authority, freeStakeDelta, freeStakeReason ?? ""
     );
     ixs.push(freeStakeIx);
   }
@@ -1432,9 +1465,10 @@ export async function approveTweet(
   connection: Connection,
   wallet: Keypair,
   agentId: string,
+  tweetId: bigint,
   options?: AgentRegistryOptions,
   freeStakeDelta?: number,
-  tweetUrl?: string
+  freeStakeReason?: string
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
   const agentPda = getAgentPda(program.programId, agentId);
@@ -1450,7 +1484,7 @@ export async function approveTweet(
   );
 
   const ix = await program.methods
-    .approveTweet(agentId)
+    .approveTweet(agentId, new anchor.BN(tweetId.toString()))
     .accounts({
       verifier: wallet.publicKey,
       authority,
@@ -1462,7 +1496,7 @@ export async function approveTweet(
   if (freeStakeDelta !== undefined && freeStakeDelta !== 0) {
     const { makeAdjustFreeStakeIx } = await import("./quest");
     const freeStakeIx = await makeAdjustFreeStakeIx(
-      connection, wallet.publicKey, authority, freeStakeDelta, tweetUrl ?? ""
+      connection, wallet.publicKey, authority, freeStakeDelta, freeStakeReason ?? ""
     );
     ixs.push(freeStakeIx);
   }

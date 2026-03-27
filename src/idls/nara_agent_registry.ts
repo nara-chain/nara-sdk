@@ -100,6 +100,35 @@ export type NaraAgentRegistry = {
           }
         },
         {
+          "name": "tweetRecord",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  119,
+                  101,
+                  101,
+                  116,
+                  95,
+                  114,
+                  101,
+                  99,
+                  111,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "tweetId"
+              }
+            ]
+          }
+        },
+        {
           "name": "authority",
           "writable": true
         },
@@ -311,6 +340,10 @@ export type NaraAgentRegistry = {
         {
           "name": "agentId",
           "type": "string"
+        },
+        {
+          "name": "tweetId",
+          "type": "u128"
         }
       ]
     },
@@ -2811,6 +2844,34 @@ export type NaraAgentRegistry = {
           }
         },
         {
+          "name": "tweetRecord",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  119,
+                  101,
+                  101,
+                  116,
+                  95,
+                  114,
+                  101,
+                  99,
+                  111,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "tweetId"
+              }
+            ]
+          }
+        },
+        {
           "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
@@ -2821,8 +2882,8 @@ export type NaraAgentRegistry = {
           "type": "string"
         },
         {
-          "name": "tweetUrl",
-          "type": "string"
+          "name": "tweetId",
+          "type": "u128"
         }
       ]
     },
@@ -4047,6 +4108,19 @@ export type NaraAgentRegistry = {
       ]
     },
     {
+      "name": "tweetRecord",
+      "discriminator": [
+        13,
+        25,
+        5,
+        236,
+        64,
+        149,
+        72,
+        215
+      ]
+    },
+    {
       "name": "tweetVerify",
       "discriminator": [
         6,
@@ -4308,6 +4382,16 @@ export type NaraAgentRegistry = {
       "code": 6043,
       "name": "twitterAlreadyVerified",
       "msg": "Twitter is already verified, unbind first"
+    },
+    {
+      "code": 6044,
+      "name": "invalidTweetUrlFormat",
+      "msg": "Invalid tweet URL format"
+    },
+    {
+      "code": 6045,
+      "name": "tweetAlreadyApproved",
+      "msg": "Tweet has already been approved"
     }
   ],
   "types": [
@@ -4671,6 +4755,53 @@ export type NaraAgentRegistry = {
       }
     },
     {
+      "name": "tweetRecord",
+      "docs": [
+        "Records an approved tweet to prevent duplicate submissions.",
+        "Seeds: [SEED_TWEET_RECORD, &tweet_id.to_le_bytes()]"
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c",
+        "packed": true
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "agent",
+            "docs": [
+              "The agent PDA that submitted this tweet"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "approvedAt",
+            "docs": [
+              "Unix timestamp when this tweet was approved"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "tweetId",
+            "docs": [
+              "Tweet ID (Twitter snowflake ID)"
+            ],
+            "type": "u128"
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
       "name": "tweetVerify",
       "docs": [
         "Per-agent tweet verification state.",
@@ -4678,7 +4809,8 @@ export type NaraAgentRegistry = {
       ],
       "serialization": "bytemuck",
       "repr": {
-        "kind": "c"
+        "kind": "c",
+        "packed": true
       },
       "type": {
         "kind": "struct",
@@ -4718,30 +4850,18 @@ export type NaraAgentRegistry = {
             "type": "i64"
           },
           {
-            "name": "tweetUrlLen",
+            "name": "tweetId",
             "docs": [
-              "Actual byte length of tweet_url"
+              "Tweet ID (Twitter snowflake ID)"
             ],
-            "type": "u64"
-          },
-          {
-            "name": "tweetUrl",
-            "docs": [
-              "Tweet URL (max 256 bytes)"
-            ],
-            "type": {
-              "array": [
-                "u8",
-                256
-              ]
-            }
+            "type": "u128"
           },
           {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                128
+                256
               ]
             }
           },
@@ -4751,6 +4871,42 @@ export type NaraAgentRegistry = {
               "array": [
                 "u8",
                 128
+              ]
+            }
+          },
+          {
+            "name": "reserved3",
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          },
+          {
+            "name": "reserved4",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "reserved5",
+            "type": {
+              "array": [
+                "u8",
+                16
+              ]
+            }
+          },
+          {
+            "name": "reserved6",
+            "type": {
+              "array": [
+                "u8",
+                8
               ]
             }
           }
