@@ -411,8 +411,8 @@ export async function getConfig(
   registerFee: number;
   pointsSelf: number;
   pointsReferral: number;
-  referralRegisterFee: number;
-  referralFeeShare: number;
+  referralDiscountBps: number;
+  referralShareBps: number;
   referralRegisterPoints: number;
   activityReward: number;
   referralActivityReward: number;
@@ -422,6 +422,9 @@ export async function getConfig(
   twitterVerificationPoints: number;
   tweetVerifyReward: number;
   tweetVerifyPoints: number;
+  registerFee7: number;
+  registerFee6: number;
+  registerFee5: number;
 }> {
   const pid = new PublicKey(options?.programId ?? DEFAULT_AGENT_REGISTRY_PROGRAM_ID);
   const configPda = getConfigPda(pid);
@@ -439,8 +442,8 @@ export async function getConfig(
   const registerFee = Number(buf.readBigUInt64LE(offset)); offset += 8;
   const pointsSelf = Number(buf.readBigUInt64LE(offset)); offset += 8;
   const pointsReferral = Number(buf.readBigUInt64LE(offset)); offset += 8;
-  const referralRegisterFee = Number(buf.readBigUInt64LE(offset)); offset += 8;
-  const referralFeeShare = Number(buf.readBigUInt64LE(offset)); offset += 8;
+  const referralDiscountBps = Number(buf.readBigUInt64LE(offset)); offset += 8;
+  const referralShareBps = Number(buf.readBigUInt64LE(offset)); offset += 8;
   const referralRegisterPoints = Number(buf.readBigUInt64LE(offset)); offset += 8;
   const activityReward = Number(buf.readBigUInt64LE(offset)); offset += 8;
   const referralActivityReward = Number(buf.readBigUInt64LE(offset)); offset += 8;
@@ -449,8 +452,11 @@ export async function getConfig(
   const twitterVerificationReward = Number(buf.readBigUInt64LE(offset)); offset += 8;
   const twitterVerificationPoints = Number(buf.readBigUInt64LE(offset)); offset += 8;
   const tweetVerifyReward = Number(buf.readBigUInt64LE(offset)); offset += 8;
-  const tweetVerifyPoints = Number(buf.readBigUInt64LE(offset));
-  return { admin, feeVault, pointMint, refereeMint, refereeActivityMint, registerFee, pointsSelf, pointsReferral, referralRegisterFee, referralFeeShare, referralRegisterPoints, activityReward, referralActivityReward, twitterVerifier, twitterVerificationFee, twitterVerificationReward, twitterVerificationPoints, tweetVerifyReward, tweetVerifyPoints };
+  const tweetVerifyPoints = Number(buf.readBigUInt64LE(offset)); offset += 8;
+  const registerFee7 = Number(buf.readBigUInt64LE(offset)); offset += 8;
+  const registerFee6 = Number(buf.readBigUInt64LE(offset)); offset += 8;
+  const registerFee5 = Number(buf.readBigUInt64LE(offset));
+  return { admin, feeVault, pointMint, refereeMint, refereeActivityMint, registerFee, pointsSelf, pointsReferral, referralDiscountBps, referralShareBps, referralRegisterPoints, activityReward, referralActivityReward, twitterVerifier, twitterVerificationFee, twitterVerificationReward, twitterVerificationPoints, tweetVerifyReward, tweetVerifyPoints, registerFee7, registerFee6, registerFee5 };
 }
 
 // ─── Agent CRUD ─────────────────────────────────────────────────
@@ -1004,13 +1010,19 @@ export async function withdrawFees(
 export async function updateRegisterFee(
   connection: Connection,
   wallet: Keypair,
-  newFee: number | BN,
+  fee: number | BN,
+  fee7: number | BN,
+  fee6: number | BN,
+  fee5: number | BN,
   options?: AgentRegistryOptions
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
-  const fee = typeof newFee === "number" ? new BN(newFee) : newFee;
+  const f = typeof fee === "number" ? new BN(fee) : fee;
+  const f7 = typeof fee7 === "number" ? new BN(fee7) : fee7;
+  const f6 = typeof fee6 === "number" ? new BN(fee6) : fee6;
+  const f5 = typeof fee5 === "number" ? new BN(fee5) : fee5;
   const ix = await program.methods
-    .updateRegisterFee(fee)
+    .updateRegisterFee(f, f7, f6, f5)
     .accounts({ admin: wallet.publicKey } as any)
     .instruction();
   return sendTx(connection, wallet, [ix]);
@@ -1046,17 +1058,17 @@ export async function updatePointsConfig(
 export async function updateReferralConfig(
   connection: Connection,
   wallet: Keypair,
-  referralRegisterFee: number | BN,
-  referralFeeShare: number | BN,
+  referralDiscountBps: number | BN,
+  referralShareBps: number | BN,
   referralRegisterPoints: number | BN,
   options?: AgentRegistryOptions
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
-  const fee = typeof referralRegisterFee === "number" ? new BN(referralRegisterFee) : referralRegisterFee;
-  const share = typeof referralFeeShare === "number" ? new BN(referralFeeShare) : referralFeeShare;
+  const discount = typeof referralDiscountBps === "number" ? new BN(referralDiscountBps) : referralDiscountBps;
+  const share = typeof referralShareBps === "number" ? new BN(referralShareBps) : referralShareBps;
   const pts = typeof referralRegisterPoints === "number" ? new BN(referralRegisterPoints) : referralRegisterPoints;
   const ix = await program.methods
-    .updateReferralConfig(fee, share, pts)
+    .updateReferralConfig(discount, share, pts)
     .accounts({ admin: wallet.publicKey } as any)
     .instruction();
   return sendTx(connection, wallet, [ix]);

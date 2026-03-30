@@ -3296,11 +3296,11 @@ export type NaraAgentRegistry = {
       ],
       "args": [
         {
-          "name": "referralRegisterFee",
+          "name": "referralDiscountBps",
           "type": "u64"
         },
         {
-          "name": "referralFeeShare",
+          "name": "referralShareBps",
           "type": "u64"
         },
         {
@@ -3351,7 +3351,19 @@ export type NaraAgentRegistry = {
       ],
       "args": [
         {
-          "name": "newFee",
+          "name": "fee",
+          "type": "u64"
+        },
+        {
+          "name": "fee7",
+          "type": "u64"
+        },
+        {
+          "name": "fee6",
+          "type": "u64"
+        },
+        {
+          "name": "fee5",
           "type": "u64"
         }
       ]
@@ -4160,6 +4172,32 @@ export type NaraAgentRegistry = {
         74,
         39
       ]
+    },
+    {
+      "name": "twitterBindRequested",
+      "discriminator": [
+        251,
+        254,
+        188,
+        154,
+        25,
+        126,
+        76,
+        169
+      ]
+    },
+    {
+      "name": "twitterBindResult",
+      "discriminator": [
+        4,
+        160,
+        91,
+        219,
+        142,
+        73,
+        75,
+        215
+      ]
     }
   ],
   "errors": [
@@ -4392,6 +4430,11 @@ export type NaraAgentRegistry = {
       "code": 6045,
       "name": "tweetAlreadyApproved",
       "msg": "Tweet has already been approved"
+    },
+    {
+      "code": 6046,
+      "name": "agentIdReserved",
+      "msg": "Agent ID length <= 4 is reserved for admin only"
     }
   ],
   "types": [
@@ -4681,11 +4724,11 @@ export type NaraAgentRegistry = {
             "type": "u64"
           },
           {
-            "name": "referralRegisterFee",
+            "name": "referralDiscountBps",
             "type": "u64"
           },
           {
-            "name": "referralFeeShare",
+            "name": "referralShareBps",
             "type": "u64"
           },
           {
@@ -4725,6 +4768,18 @@ export type NaraAgentRegistry = {
             "type": "u64"
           },
           {
+            "name": "registerFee7",
+            "type": "u64"
+          },
+          {
+            "name": "registerFee6",
+            "type": "u64"
+          },
+          {
+            "name": "registerFee5",
+            "type": "u64"
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
@@ -4739,15 +4794,6 @@ export type NaraAgentRegistry = {
               "array": [
                 "u8",
                 96
-              ]
-            }
-          },
-          {
-            "name": "reserved3",
-            "type": {
-              "array": [
-                "u8",
-                24
               ]
             }
           }
@@ -4909,6 +4955,78 @@ export type NaraAgentRegistry = {
                 8
               ]
             }
+          }
+        ]
+      }
+    },
+    {
+      "name": "twitterBindRequested",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "agentId",
+            "type": "string"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "username",
+            "type": "string"
+          },
+          {
+            "name": "fee",
+            "type": "u64"
+          },
+          {
+            "name": "isFirstBind",
+            "type": "bool"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "twitterBindResult",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "agentId",
+            "type": "string"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "username",
+            "type": "string"
+          },
+          {
+            "name": "approved",
+            "type": "bool"
+          },
+          {
+            "name": "feeRefunded",
+            "type": "u64"
+          },
+          {
+            "name": "reward",
+            "type": "u64"
+          },
+          {
+            "name": "points",
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
           }
         ]
       }

@@ -3290,11 +3290,11 @@
       ],
       "args": [
         {
-          "name": "referral_register_fee",
+          "name": "referral_discount_bps",
           "type": "u64"
         },
         {
-          "name": "referral_fee_share",
+          "name": "referral_share_bps",
           "type": "u64"
         },
         {
@@ -3345,7 +3345,19 @@
       ],
       "args": [
         {
-          "name": "new_fee",
+          "name": "fee",
+          "type": "u64"
+        },
+        {
+          "name": "fee_7",
+          "type": "u64"
+        },
+        {
+          "name": "fee_6",
+          "type": "u64"
+        },
+        {
+          "name": "fee_5",
           "type": "u64"
         }
       ]
@@ -4154,6 +4166,32 @@
         74,
         39
       ]
+    },
+    {
+      "name": "TwitterBindRequested",
+      "discriminator": [
+        251,
+        254,
+        188,
+        154,
+        25,
+        126,
+        76,
+        169
+      ]
+    },
+    {
+      "name": "TwitterBindResult",
+      "discriminator": [
+        4,
+        160,
+        91,
+        219,
+        142,
+        73,
+        75,
+        215
+      ]
     }
   ],
   "errors": [
@@ -4386,6 +4424,11 @@
       "code": 6045,
       "name": "TweetAlreadyApproved",
       "msg": "Tweet has already been approved"
+    },
+    {
+      "code": 6046,
+      "name": "AgentIdReserved",
+      "msg": "Agent ID length <= 4 is reserved for admin only"
     }
   ],
   "types": [
@@ -4675,11 +4718,11 @@
             "type": "u64"
           },
           {
-            "name": "referral_register_fee",
+            "name": "referral_discount_bps",
             "type": "u64"
           },
           {
-            "name": "referral_fee_share",
+            "name": "referral_share_bps",
             "type": "u64"
           },
           {
@@ -4719,6 +4762,18 @@
             "type": "u64"
           },
           {
+            "name": "register_fee_7",
+            "type": "u64"
+          },
+          {
+            "name": "register_fee_6",
+            "type": "u64"
+          },
+          {
+            "name": "register_fee_5",
+            "type": "u64"
+          },
+          {
             "name": "_reserved",
             "type": {
               "array": [
@@ -4733,15 +4788,6 @@
               "array": [
                 "u8",
                 96
-              ]
-            }
-          },
-          {
-            "name": "_reserved3",
-            "type": {
-              "array": [
-                "u8",
-                24
               ]
             }
           }
@@ -4903,6 +4949,78 @@
                 8
               ]
             }
+          }
+        ]
+      }
+    },
+    {
+      "name": "TwitterBindRequested",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "agent_id",
+            "type": "string"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "username",
+            "type": "string"
+          },
+          {
+            "name": "fee",
+            "type": "u64"
+          },
+          {
+            "name": "is_first_bind",
+            "type": "bool"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TwitterBindResult",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "agent_id",
+            "type": "string"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "username",
+            "type": "string"
+          },
+          {
+            "name": "approved",
+            "type": "bool"
+          },
+          {
+            "name": "fee_refunded",
+            "type": "u64"
+          },
+          {
+            "name": "reward",
+            "type": "u64"
+          },
+          {
+            "name": "points",
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
           }
         ]
       }

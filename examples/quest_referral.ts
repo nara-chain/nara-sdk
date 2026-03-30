@@ -134,8 +134,8 @@ async function main() {
   const config = await getAgentRegistryConfig(connection);
   console.log(`  Points per activity (self): ${config.pointsSelf}`);
   console.log(`  Points per referral: ${config.pointsReferral}`);
-  console.log(`  Referral register fee: ${config.referralRegisterFee}`);
-  console.log(`  Referral fee share: ${config.referralFeeShare}`);
+  console.log(`  Referral discount bps: ${config.referralDiscountBps}`);
+  console.log(`  Referral share bps: ${config.referralShareBps}`);
   console.log(`  Referral register points: ${config.referralRegisterPoints}`);
 
   // ── 5. Fetch quest and answer with referral ────────────────────
