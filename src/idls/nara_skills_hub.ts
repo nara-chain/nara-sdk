@@ -983,7 +983,7 @@ export type NaraSkillsHub = {
     {
       "code": 6000,
       "name": "nameTooShort",
-      "msg": "Name too short: min 5 bytes"
+      "msg": "Name too short: min 4 bytes"
     },
     {
       "code": 6001,
@@ -1365,7 +1365,7 @@ export type NaraSkillsHub = {
           {
             "name": "name",
             "docs": [
-              "Globally unique name (min 5 bytes, max 32 bytes)."
+              "Globally unique name (min 4 bytes, max 32 bytes)."
             ],
             "type": {
               "array": [
