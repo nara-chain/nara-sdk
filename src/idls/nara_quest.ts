@@ -381,6 +381,61 @@ export type NaraQuest = {
       ]
     },
     {
+      "name": "expandConfig",
+      "discriminator": [
+        120,
+        201,
+        195,
+        128,
+        35,
+        202,
+        73,
+        161
+      ],
+      "accounts": [
+        {
+          "name": "gameConfig",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  113,
+                  117,
+                  101,
+                  115,
+                  116,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "additionalSize",
+          "type": "u32"
+        }
+      ]
+    },
+    {
       "name": "initialize",
       "discriminator": [
         175,
