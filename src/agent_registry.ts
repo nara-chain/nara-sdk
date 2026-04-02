@@ -43,6 +43,8 @@ export interface AgentRecord {
   version: number;
   /** Referral agent ID, null if none */
   referralId: string | null;
+  /** Number of agents referred by this agent */
+  referralCount: number;
   createdAt: number;
   updatedAt: number;
 }
@@ -255,6 +257,10 @@ function parseAgentRecordData(data: Buffer | Uint8Array): AgentRecord {
   const referralId = referralIdLen > 0
     ? buf.subarray(offset, offset + referralIdLen).toString("utf-8")
     : null;
+  offset += 32; // referral_id fixed array
+
+  offset += 4; // _padding
+  const referralCount = buf.readUInt32LE(offset);
 
   return {
     authority,
@@ -263,6 +269,7 @@ function parseAgentRecordData(data: Buffer | Uint8Array): AgentRecord {
     memory,
     version,
     referralId,
+    referralCount,
     createdAt,
     updatedAt,
   };

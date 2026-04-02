@@ -2099,7 +2099,8 @@ export type NaraAgentRegistry = {
           }
         },
         {
-          "name": "referralAgent"
+          "name": "referralAgent",
+          "writable": true
         },
         {
           "name": "referralAuthority",
@@ -2713,7 +2714,8 @@ export type NaraAgentRegistry = {
           }
         },
         {
-          "name": "referralAgent"
+          "name": "referralAgent",
+          "writable": true
         },
         {
           "name": "config",
@@ -4870,11 +4872,33 @@ export type NaraAgentRegistry = {
             "type": "u32"
           },
           {
+            "name": "referralCount",
+            "type": "u32"
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                64
+                32
+              ]
+            }
+          },
+          {
+            "name": "reserved2",
+            "type": {
+              "array": [
+                "u8",
+                16
+              ]
+            }
+          },
+          {
+            "name": "reserved3",
+            "type": {
+              "array": [
+                "u8",
+                12
               ]
             }
           }

@@ -2093,7 +2093,8 @@
           }
         },
         {
-          "name": "referral_agent"
+          "name": "referral_agent",
+          "writable": true
         },
         {
           "name": "referral_authority",
@@ -2707,7 +2708,8 @@
           }
         },
         {
-          "name": "referral_agent"
+          "name": "referral_agent",
+          "writable": true
         },
         {
           "name": "config",
@@ -4864,11 +4866,33 @@
             "type": "u32"
           },
           {
+            "name": "referral_count",
+            "type": "u32"
+          },
+          {
             "name": "_reserved",
             "type": {
               "array": [
                 "u8",
-                64
+                32
+              ]
+            }
+          },
+          {
+            "name": "_reserved2",
+            "type": {
+              "array": [
+                "u8",
+                16
+              ]
+            }
+          },
+          {
+            "name": "_reserved3",
+            "type": {
+              "array": [
+                "u8",
+                12
               ]
             }
           }
