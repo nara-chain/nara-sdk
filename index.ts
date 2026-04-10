@@ -176,6 +176,11 @@ export {
   SOLANA_MAILBOX,
   NARA_MAILBOX,
   SPL_NOOP,
+  SOLANA_USDC_MINT,
+  NARA_USDC_MINT,
+  SOLANA_USDT_MINT,
+  NARA_USDT_MINT,
+  NARA_SOL_MINT,
   BRIDGE_TOKENS,
   // Token registry
   registerBridgeToken,

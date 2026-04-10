@@ -105,6 +105,14 @@ export const SPL_NOOP = new PublicKey(
   "noopb9bkMVfRPU8AsbpTUg8AQkHtKwMYZiFUjNRtMmV"
 );
 
+// ─── Token mint constants ─────────────────────────────────────────
+
+export const SOLANA_USDC_MINT = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+export const NARA_USDC_MINT = new PublicKey("8P7UGWjq86N3WUmwEgKeGHJZLcoMJqr5jnRUmeBN7YwR");
+export const SOLANA_USDT_MINT = new PublicKey("Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB");
+export const NARA_USDT_MINT = new PublicKey("8yQSyqC85A9Vcqz8gTU2Bk5Y63bnC5378sgx1biTKsjd");
+export const NARA_SOL_MINT = new PublicKey("7fKh7DqPZmsYPHdGvt9Qw2rZkSEGp9F5dBa3XuuuhavU");
+
 function mailboxFor(chain: BridgeChain): PublicKey {
   return chain === "solana" ? SOLANA_MAILBOX : NARA_MAILBOX;
 }
@@ -122,13 +130,29 @@ export const BRIDGE_TOKENS: Record<string, BridgeTokenConfig> = {
     solana: {
       warpProgram: new PublicKey("4GcZJTa8s9vxtTz97Vj1RrwKMqPkT3DiiJkvUQDwsuZP"),
       mode: "collateral",
-      mint: new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"),
+      mint: SOLANA_USDC_MINT,
       tokenProgram: TOKEN_PROGRAM_ID,
     },
     nara: {
       warpProgram: new PublicKey("BC2j6WrdPs9xhU9CfBwJsYSnJrGq5Tcm4SEen9ENv7go"),
       mode: "synthetic",
-      mint: new PublicKey("8P7UGWjq86N3WUmwEgKeGHJZLcoMJqr5jnRUmeBN7YwR"),
+      mint: NARA_USDC_MINT,
+      tokenProgram: TOKEN_2022_PROGRAM_ID,
+    },
+  },
+  USDT: {
+    symbol: "USDT",
+    decimals: 6,
+    solana: {
+      warpProgram: new PublicKey("DCTt9H3pwwU89qC3Z4voYNThZypV68AwhYNzMNBxWXoy"),
+      mode: "collateral",
+      mint: SOLANA_USDT_MINT,
+      tokenProgram: TOKEN_PROGRAM_ID,
+    },
+    nara: {
+      warpProgram: new PublicKey("2q5HJaaagMxBM7GD5yR55xHN4tDZMh1gYraG1Y4wbry6"),
+      mode: "synthetic",
+      mint: NARA_USDT_MINT,
       tokenProgram: TOKEN_2022_PROGRAM_ID,
     },
   },
@@ -144,7 +168,7 @@ export const BRIDGE_TOKENS: Record<string, BridgeTokenConfig> = {
     nara: {
       warpProgram: new PublicKey("6bKmjEMbjcJUnqAiNw7AXuMvUALzw5XRKiV9dBsterxg"),
       mode: "synthetic",
-      mint: new PublicKey("7fKh7DqPZmsYPHdGvt9Qw2rZkSEGp9F5dBa3XuuuhavU"),
+      mint: NARA_SOL_MINT,
       tokenProgram: TOKEN_2022_PROGRAM_ID,
     },
   },
