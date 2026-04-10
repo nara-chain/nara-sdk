@@ -45,3 +45,23 @@ export const DEFAULT_AGENT_REGISTRY_PROGRAM_ID =
  * When empty, uses legacy transactions.
  */
 export const DEFAULT_ALT_ADDRESS = process.env.ALT_ADDRESS || "3uw7RatGTB4hdHnuVLXjsqcMZ87zXsMSc3XbyoPA8mB7";
+
+/**
+ * Bridge fee in basis points (1 bps = 0.01%). 50 = 0.5%.
+ * Deducted from the bridged amount and transferred to DEFAULT_BRIDGE_FEE_RECIPIENT
+ * in the same transaction.
+ */
+export const DEFAULT_BRIDGE_FEE_BPS = 50;
+
+/** BPS denominator (10000 = 100%) */
+export const BRIDGE_FEE_BPS_DENOMINATOR = 10000;
+
+/**
+ * Default fee recipient pubkey for cross-chain bridge transactions.
+ * Same Ed25519 keypair works on both Solana and Nara chains.
+ * Override at runtime via setBridgeFeeRecipient() in src/bridge.ts.
+ *
+ * NOTE: replace with actual fee recipient before mainnet usage.
+ */
+export const DEFAULT_BRIDGE_FEE_RECIPIENT =
+  "FERLFwBpCyoEuvFP68eP6Fv4FCVocnNyyFUCYwpfmjqn";

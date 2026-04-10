@@ -15,6 +15,9 @@ export {
   DEFAULT_ZKID_PROGRAM_ID,
   DEFAULT_AGENT_REGISTRY_PROGRAM_ID,
   DEFAULT_ALT_ADDRESS,
+  DEFAULT_BRIDGE_FEE_BPS,
+  DEFAULT_BRIDGE_FEE_RECIPIENT,
+  BRIDGE_FEE_BPS_DENOMINATOR,
 } from "./src/constants";
 
 // Export signing utilities
@@ -164,6 +167,52 @@ export {
   type MemoryMode,
   type AgentRegistryOptions,
 } from "./src/agent_registry";
+
+// Export bridge functions and types
+export {
+  // Constants
+  SOLANA_DOMAIN,
+  NARA_DOMAIN,
+  SOLANA_MAILBOX,
+  NARA_MAILBOX,
+  SPL_NOOP,
+  BRIDGE_TOKENS,
+  // Token registry
+  registerBridgeToken,
+  // Fee recipient runtime override
+  setBridgeFeeRecipient,
+  getBridgeFeeRecipient,
+  // PDA helpers
+  deriveOutboxPda,
+  deriveDispatchAuthorityPda,
+  deriveDispatchedMessagePda,
+  deriveTokenPda,
+  deriveEscrowPda,
+  deriveNativeCollateralPda,
+  // Encoders
+  encodeTransferRemote,
+  // Fee + ix builders
+  calculateBridgeFee,
+  makeBridgeFeeIxs,
+  makeTransferRemoteIx,
+  makeBridgeIxs,
+  // High level
+  bridgeTransfer,
+  extractMessageId,
+  queryMessageStatus,
+  queryMessageSignatures,
+  type BridgeChain,
+  type BridgeMode,
+  type BridgeTokenSide,
+  type BridgeTokenConfig,
+  type BridgeTransferParams,
+  type BridgeIxsResult,
+  type BridgeTransferResult,
+  type FeeSplit,
+  type MessageStatus,
+  type ValidatorSignature,
+  type MessageSignatureStatus,
+} from "./src/bridge";
 
 // Export IDLs and types
 export { default as NaraQuestIDL } from "./src/idls/nara_quest.json";
