@@ -43,7 +43,10 @@ import { BRIDGE_TOKENS } from "./bridge";
 // ─── Types ────────────────────────────────────────────────────────
 
 export interface ParsedInstruction {
-  /** Instruction index in the transaction */
+  /**
+   * Instruction index. For top-level ixs this is the 0-based position in the tx.
+   * For inner ixs this is the 0-based position within the parent's CPI list.
+   */
   index: number;
   /** Human-readable program name */
   programName: string;
@@ -57,6 +60,11 @@ export interface ParsedInstruction {
   accounts: string[];
   /** Raw instruction data (base64) */
   rawData: string;
+  /**
+   * Inner instructions (CPI calls) made by this instruction.
+   * Only populated on top-level ixs; empty/undefined for ixs that made no CPI calls.
+   */
+  innerInstructions?: ParsedInstruction[];
 }
 
 export interface ParsedTransaction {
@@ -72,7 +80,7 @@ export interface ParsedTransaction {
   error: string | null;
   /** Fee paid in lamports */
   fee: number;
-  /** Parsed instructions */
+  /** Top-level instructions. Inner (CPI) ixs are nested under each one via `innerInstructions`. */
   instructions: ParsedInstruction[];
   /** Log messages */
   logs: string[];
@@ -636,6 +644,39 @@ export async function parseTxFromHash(
 }
 
 /**
+ * Fetch and parse multiple transactions in a single batch RPC request.
+ *
+ * Uses `connection.getTransactions(sigs)` which sends one JSON-RPC batch
+ * under the hood (via `_rpcBatchRequest`), so N signatures → 1 HTTP call.
+ *
+ * Returns a result array aligned with the input: each entry is either a
+ * `ParsedTransaction` or `null` if the RPC could not find that signature.
+ * This preserves index mapping so the caller can pair results with inputs.
+ *
+ * @example
+ * ```ts
+ * const results = await parseTxsFromHashes(connection, [sig1, sig2, sig3]);
+ * results.forEach((r, i) => {
+ *   if (!r) console.log(`${sigs[i]} not found`);
+ *   else console.log(formatParsedTx(r));
+ * });
+ * ```
+ */
+export async function parseTxsFromHashes(
+  connection: Connection,
+  signatures: string[]
+): Promise<(ParsedTransaction | null)[]> {
+  if (signatures.length === 0) return [];
+
+  const txs = await connection.getTransactions(signatures, {
+    maxSupportedTransactionVersion: 0,
+    commitment: "confirmed",
+  });
+
+  return txs.map((tx) => (tx ? parseTxResponse(tx) : null));
+}
+
+/**
  * Parse a VersionedTransactionResponse (from getTransaction) synchronously.
  *
  * @example
@@ -663,25 +704,25 @@ export function parseTxResponse(tx: VersionedTransactionResponse): ParsedTransac
     decodeInstruction(ix, i, accountKeys)
   );
 
-  // Also parse inner instructions (CPI)
+  // Attach inner instructions (CPI calls) under their parent ix.
+  // RPC response: meta.innerInstructions is [{ index, instructions: [...] }, ...]
+  // where `index` points to the top-level ix that made the CPI calls.
   if (tx.meta?.innerInstructions) {
     for (const inner of tx.meta.innerInstructions) {
-      for (const innerIx of inner.instructions) {
-        let dataBuf: Buffer;
-        if (typeof innerIx.data === "string") {
-          dataBuf = Buffer.from(decodeBase58(innerIx.data));
-        } else {
-          dataBuf = Buffer.from(innerIx.data);
-        }
+      const parent = instructions[inner.index];
+      if (!parent) continue;
+      parent.innerInstructions = inner.instructions.map((innerIx, j) => {
+        const dataBuf: Buffer =
+          typeof innerIx.data === "string"
+            ? Buffer.from(decodeBase58(innerIx.data))
+            : Buffer.from(innerIx.data);
         const innerCompiled: MessageCompiledInstruction = {
           programIdIndex: innerIx.programIdIndex,
           accountKeyIndexes: innerIx.accounts,
           data: dataBuf,
         };
-        instructions.push(
-          decodeInstruction(innerCompiled, instructions.length, accountKeys)
-        );
-      }
+        return decodeInstruction(innerCompiled, j, accountKeys);
+      });
     }
   }
 
@@ -739,12 +780,23 @@ export function formatParsedTx(parsed: ParsedTransaction): string {
   lines.push("");
 
   for (const ix of parsed.instructions) {
-    const infoStr = Object.entries(ix.info)
-      .map(([k, v]) => `${k}=${v}`)
-      .join(", ");
-    lines.push(`  #${ix.index} [${ix.programName}] ${ix.type}`);
-    if (infoStr) lines.push(`      ${infoStr}`);
+    formatIxLines(ix, 0, lines);
   }
 
   return lines.join("\n");
+}
+
+function formatIxLines(ix: ParsedInstruction, depth: number, lines: string[]): void {
+  const indent = "  ".repeat(depth + 1);
+  const prefix = depth === 0 ? `#${ix.index}` : `↳ ${ix.index}`;
+  const infoStr = Object.entries(ix.info)
+    .map(([k, v]) => `${k}=${v}`)
+    .join(", ");
+  lines.push(`${indent}${prefix} [${ix.programName}] ${ix.type}`);
+  if (infoStr) lines.push(`${indent}    ${infoStr}`);
+  if (ix.innerInstructions && ix.innerInstructions.length > 0) {
+    for (const inner of ix.innerInstructions) {
+      formatIxLines(inner, depth + 1, lines);
+    }
+  }
 }

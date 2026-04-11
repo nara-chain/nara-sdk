@@ -223,6 +223,7 @@ export {
 // Export transaction parser
 export {
   parseTxFromHash,
+  parseTxsFromHashes,
   parseTxResponse,
   formatParsedTx,
   type ParsedInstruction,

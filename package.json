@@ -1,6 +1,6 @@
 {
   "name": "nara-sdk",
-  "version": "1.0.78",
+  "version": "1.0.79",
   "description": "SDK for the Nara chain (Solana-compatible)",
   "module": "index.ts",
   "main": "index.ts",
@@ -18,7 +18,8 @@
     "sdk"
   ],
   "scripts": {
-    "test": "tsx test/read_api.test.ts"
+    "test": "tsx test/read_api.test.ts",
+    "test:parser": "tsx test/tx_parser.test.ts"
   },
   "author": "",
   "license": "MIT",
