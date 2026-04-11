@@ -127,12 +127,17 @@ registerBridgeToken('USDT', {
 ### Fee configuration
 
 Default fee: **0.5%** (50 bps), deducted from the bridged amount on the source chain.
+Fee recipients are chain-specific (one per source chain).
 
 ```ts
-import { setBridgeFeeRecipient } from 'nara-sdk';
+import { setBridgeFeeRecipient, getBridgeFeeRecipient } from 'nara-sdk';
 
-// Override fee recipient at runtime
-setBridgeFeeRecipient('YourFeeRecipientPubkey...');
+// Override fee recipient at runtime (per chain)
+setBridgeFeeRecipient('solana', 'SolanaFeeRecipientPubkey...');
+setBridgeFeeRecipient('nara',   'NaraFeeRecipientPubkey...');
+
+// Read current recipient
+const recipient = getBridgeFeeRecipient('solana');  // PublicKey
 
 // Or per-call
 await bridgeTransfer(conn, wallet, {

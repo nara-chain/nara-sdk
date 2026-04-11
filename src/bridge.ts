@@ -27,7 +27,8 @@ import {
 import {
   BRIDGE_FEE_BPS_DENOMINATOR,
   DEFAULT_BRIDGE_FEE_BPS,
-  DEFAULT_BRIDGE_FEE_RECIPIENT,
+  DEFAULT_BRIDGE_FEE_RECIPIENT_SOLANA,
+  DEFAULT_BRIDGE_FEE_RECIPIENT_NARA,
 } from "./constants";
 import { sendTx } from "./tx";
 
@@ -185,23 +186,38 @@ function getToken(symbol: string): BridgeTokenConfig {
   return t;
 }
 
-// ─── Fee recipient (runtime override) ─────────────────────────────
+// ─── Fee recipient (runtime override, per chain) ──────────────────
 
-let _feeRecipientOverride: PublicKey | null = null;
+const _feeRecipientOverrides: Record<BridgeChain, PublicKey | null> = {
+  solana: null,
+  nara: null,
+};
 
-/** Override the bridge fee recipient at runtime */
-export function setBridgeFeeRecipient(recipient: PublicKey | string | null): void {
+/**
+ * Override the bridge fee recipient for a specific source chain at runtime.
+ * Pass `null` as recipient to clear the override and fall back to the default.
+ */
+export function setBridgeFeeRecipient(
+  chain: BridgeChain,
+  recipient: PublicKey | string | null
+): void {
   if (recipient === null) {
-    _feeRecipientOverride = null;
+    _feeRecipientOverrides[chain] = null;
     return;
   }
-  _feeRecipientOverride =
+  _feeRecipientOverrides[chain] =
     typeof recipient === "string" ? new PublicKey(recipient) : recipient;
 }
 
-export function getBridgeFeeRecipient(): PublicKey {
-  if (_feeRecipientOverride) return _feeRecipientOverride;
-  return new PublicKey(DEFAULT_BRIDGE_FEE_RECIPIENT);
+/** Get the current fee recipient for a source chain (override or default). */
+export function getBridgeFeeRecipient(chain: BridgeChain): PublicKey {
+  const override = _feeRecipientOverrides[chain];
+  if (override) return override;
+  const defaultAddr =
+    chain === "solana"
+      ? DEFAULT_BRIDGE_FEE_RECIPIENT_SOLANA
+      : DEFAULT_BRIDGE_FEE_RECIPIENT_NARA;
+  return new PublicKey(defaultAddr);
 }
 
 // ─── PDA derivation ───────────────────────────────────────────────
@@ -515,7 +531,7 @@ export function makeBridgeIxs(params: BridgeTransferParams): BridgeIxsResult {
     throw new Error("bridge amount after fee is zero — increase amount or lower feeBps");
   }
 
-  const recipientForFee = feeRecipient ?? getBridgeFeeRecipient();
+  const recipientForFee = feeRecipient ?? getBridgeFeeRecipient(fromChain);
   const feeIxs = makeBridgeFeeIxs({
     token,
     fromChain,
