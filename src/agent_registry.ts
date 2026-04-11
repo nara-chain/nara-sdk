@@ -352,31 +352,21 @@ export async function getAgentInfo(
 ): Promise<AgentInfo> {
   const pid = new PublicKey(options?.programId ?? DEFAULT_AGENT_REGISTRY_PROGRAM_ID);
   const agentPda = getAgentPda(pid, agentId);
-  const accountInfo = await connection.getAccountInfo(agentPda);
-  if (!accountInfo) {
-    throw new Error(`Agent "${agentId}" not found`);
-  }
-  const record = parseAgentRecordData(accountInfo.data);
-
   const bioPda = getBioPda(pid, agentPda);
   const metaPda = getMetaPda(pid, agentPda);
 
-  let bio: string | null = null;
-  let metadata: string | null = null;
-
-  try {
-    const bioInfo = await connection.getAccountInfo(bioPda);
-    if (bioInfo) bio = deserializeRawString(Buffer.from(bioInfo.data));
-  } catch {
-    // account not created yet
+  // Single RPC: fetch agent record, bio, and metadata in one call
+  const [agentInfo, bioInfo, metaInfo] = await connection.getMultipleAccountsInfo(
+    [agentPda, bioPda, metaPda],
+    "confirmed"
+  );
+  if (!agentInfo) {
+    throw new Error(`Agent "${agentId}" not found`);
   }
 
-  try {
-    const metaInfo = await connection.getAccountInfo(metaPda);
-    if (metaInfo) metadata = deserializeRawString(Buffer.from(metaInfo.data));
-  } catch {
-    // account not created yet
-  }
+  const record = parseAgentRecordData(agentInfo.data);
+  const bio = bioInfo ? deserializeRawString(Buffer.from(bioInfo.data)) : null;
+  const metadata = metaInfo ? deserializeRawString(Buffer.from(metaInfo.data)) : null;
 
   return { record, bio, metadata };
 }

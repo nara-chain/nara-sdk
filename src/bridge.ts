@@ -640,17 +640,23 @@ export async function queryMessageStatus(
   const sigs = await destConnection.getSignaturesForAddress(mailbox, {
     limit,
   });
+  const validSigs = sigs.filter((s) => !s.err).map((s) => s.signature);
+  if (!validSigs.length) {
+    return { delivered: false, deliverySignature: null };
+  }
 
-  for (const entry of sigs) {
-    if (entry.err) continue;
-    const tx = await destConnection.getTransaction(entry.signature, {
-      maxSupportedTransactionVersion: 0,
-      commitment: "confirmed",
-    });
+  // Batch-fetch transactions in a single JSON-RPC call
+  const txs = await destConnection.getTransactions(validSigs, {
+    maxSupportedTransactionVersion: 0,
+    commitment: "confirmed",
+  });
+
+  for (let i = 0; i < txs.length; i++) {
+    const tx = txs[i];
     if (!tx?.meta?.logMessages) continue;
     for (const log of tx.meta.logMessages) {
       if (log.includes(messageId)) {
-        return { delivered: true, deliverySignature: entry.signature };
+        return { delivered: true, deliverySignature: validSigs[i] ?? null };
       }
     }
   }

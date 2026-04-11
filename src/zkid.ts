@@ -400,8 +400,16 @@ export async function scanClaimableDeposits(
   const [zkIdPda] = findZkIdPda(nameHashBuf, programId);
   const [inboxPda] = findInboxPda(nameHashBuf, programId);
 
-  const zkId = await program.account.zkIdAccount.fetch(zkIdPda);
-  const inbox = await program.account.inboxAccount.fetch(inboxPda);
+  // Step 1: fetch zkId + inbox in a single RPC call
+  const [zkIdAcct, inboxAcct] = await connection.getMultipleAccountsInfo(
+    [zkIdPda, inboxPda],
+    "confirmed"
+  );
+  if (!zkIdAcct) throw new Error(`ZK ID account not found: ${zkIdPda.toBase58()}`);
+  if (!inboxAcct) throw new Error(`Inbox account not found: ${inboxPda.toBase58()}`);
+
+  const zkId = program.coder.accounts.decode("zkIdAccount", zkIdAcct.data);
+  const inbox = program.coder.accounts.decode("inboxAccount", inboxAcct.data);
 
   const depositCount: number = zkId.depositCount;
   const commitmentStart: number = zkId.commitmentStartIndex;
@@ -422,23 +430,34 @@ export async function scanClaimableDeposits(
   // Oldest entry in inbox corresponds to depositIndex = (depositCount - count)
   const startDepositIndex = depositCount - count;
 
-  const claimable: ClaimableDeposit[] = [];
+  // Step 2: derive all nullifier PDAs for candidate entries (owned deposits only)
+  type Candidate = { leafIndex: bigint; depositIndex: number; denomination: bigint; nullifierPda: PublicKey };
+  const candidates: Candidate[] = [];
   for (let i = 0; i < entries.length; i++) {
     const depositIndex = startDepositIndex + i;
-
-    // Deposits before commitmentStartIndex belong to a previous owner
     if (depositIndex < commitmentStart) continue;
 
     const { leafIndex, denomination } = entries[i]!;
-
-    // Check if nullifier has been spent
     const nullifierHash_bi = await poseidonHash([idSecret, BigInt(depositIndex)]);
     const nullifierHashBuf = bigIntToBytes32BE(nullifierHash_bi);
     const denominationBN = new BN(denomination.toString());
     const [nullifierPda] = findNullifierPda(denominationBN, nullifierHashBuf, programId);
-    const nullifierInfo = await connection.getAccountInfo(nullifierPda);
+    candidates.push({ leafIndex, depositIndex, denomination, nullifierPda });
+  }
 
-    if (nullifierInfo === null) {
+  if (!candidates.length) return [];
+
+  // Step 3: batch-check all nullifiers in a single RPC call
+  // (inbox is capped at 64 entries, well under the 100-key limit)
+  const nullifierInfos = await connection.getMultipleAccountsInfo(
+    candidates.map((c) => c.nullifierPda),
+    "confirmed"
+  );
+
+  const claimable: ClaimableDeposit[] = [];
+  for (let i = 0; i < candidates.length; i++) {
+    if (nullifierInfos[i] === null) {
+      const { leafIndex, depositIndex, denomination } = candidates[i]!;
       claimable.push({ leafIndex, depositIndex, denomination });
     }
   }

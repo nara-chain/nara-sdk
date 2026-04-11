@@ -8,7 +8,11 @@ import {
   LAMPORTS_PER_SOL,
   PublicKey,
 } from "@solana/web3.js";
-import { getAssociatedTokenAddressSync } from "@solana/spl-token";
+import {
+  getAssociatedTokenAddressSync,
+  unpackAccount,
+  TOKEN_PROGRAM_ID,
+} from "@solana/spl-token";
 import * as anchor from "@coral-xyz/anchor";
 import { Program, AnchorProvider, Wallet } from "@coral-xyz/anchor";
 import BN from "bn.js";
@@ -283,7 +287,22 @@ export async function getQuestInfo(
   const kp = wallet ?? Keypair.generate();
   const program = createProgram(connection, kp, options?.programId);
   const poolPda = getPoolPda(program.programId);
-  const pool = await program.account.pool.fetch(poolPda);
+  const programId = new PublicKey(options?.programId ?? DEFAULT_QUEST_PROGRAM_ID);
+  const [configPda] = PublicKey.findProgramAddressSync(
+    [new TextEncoder().encode("quest_config")],
+    programId
+  );
+
+  // Single RPC: fetch pool + gameConfig together
+  const [poolAcct, configAcct] = await connection.getMultipleAccountsInfo(
+    [poolPda, configPda],
+    "confirmed"
+  );
+  if (!poolAcct) throw new Error(`Pool account not found: ${poolPda.toBase58()}`);
+  if (!configAcct) throw new Error(`GameConfig account not found: ${configPda.toBase58()}`);
+
+  const pool = program.coder.accounts.decode("pool", poolAcct.data);
+  const config = program.coder.accounts.decode("gameConfig", configAcct.data);
 
   const now = Math.floor(Date.now() / 1000);
   const deadline = pool.deadline.toNumber();
@@ -295,13 +314,6 @@ export async function getQuestInfo(
   const stakeLow = Number(pool.stakeLow.toString()) / LAMPORTS_PER_SOL;
   const createdAt = pool.createdAt.toNumber();
 
-  // Fetch decayMs from GameConfig for effective calculation
-  const programId = new PublicKey(options?.programId ?? DEFAULT_QUEST_PROGRAM_ID);
-  const [configPda] = PublicKey.findProgramAddressSync(
-    [new TextEncoder().encode("quest_config")],
-    programId
-  );
-  const config = await program.account.gameConfig.fetch(configPda);
   const decayMs = Number(config.decayMs.toString());
 
   // createdAt is unix timestamp (seconds), convert to ms for decay calculation
@@ -627,25 +639,39 @@ export async function getStakeInfo(
   const kp = Keypair.generate();
   const program = createProgram(connection, kp, options?.programId);
   const stakeRecordPda = getStakeRecordPda(program.programId, user);
+  const stakeTokenAccount = getStakeTokenAccount(stakeRecordPda);
+
+  // Single batch: fetch stake record + wSOL token account at once.
+  // Both are plain account reads, so getMultipleAccountsInfo works.
+  const [recordAcct, tokenAcct] = await connection.getMultipleAccountsInfo(
+    [stakeRecordPda, stakeTokenAccount],
+    "confirmed"
+  );
+  if (!recordAcct) return null;
+
+  let record;
   try {
-    const record = await program.account.stakeRecord.fetch(stakeRecordPda);
-    // Read wSOL token account balance (stake amount is stored as wSOL tokens)
-    const stakeTokenAccount = getStakeTokenAccount(stakeRecordPda);
-    let amount = 0;
-    try {
-      const balance = await connection.getTokenAccountBalance(stakeTokenAccount);
-      amount = Number(balance.value.amount) / LAMPORTS_PER_SOL;
-    } catch {
-      // Token account may not exist yet (no stake deposited)
-    }
-    return {
-      amount,
-      stakeRound: record.stakeRound.toNumber(),
-      freeCredits: record.freeCredits,
-    };
+    record = program.coder.accounts.decode("stakeRecord", recordAcct.data);
   } catch {
     return null;
   }
+
+  // Decode wSOL token account (legacy SPL Token program)
+  let amount = 0;
+  if (tokenAcct) {
+    try {
+      const unpacked = unpackAccount(stakeTokenAccount, tokenAcct, TOKEN_PROGRAM_ID);
+      amount = Number(unpacked.amount) / LAMPORTS_PER_SOL;
+    } catch {
+      // Token account not initialized yet
+    }
+  }
+
+  return {
+    amount,
+    stakeRound: record.stakeRound.toNumber(),
+    freeCredits: record.freeCredits,
+  };
 }
 
 /**

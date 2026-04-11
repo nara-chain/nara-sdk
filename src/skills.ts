@@ -216,38 +216,32 @@ export async function getSkillInfo(
 ): Promise<SkillInfo> {
   const pid = new PublicKey(options?.programId ?? DEFAULT_SKILLS_PROGRAM_ID);
   const skillPda = getSkillPda(pid, name);
-  const accountInfo = await connection.getAccountInfo(skillPda);
-  if (!accountInfo) {
-    throw new Error(`Skill "${name}" not found`);
-  }
-  const record = parseSkillRecordData(accountInfo.data);
-
   const descPda = getDescPda(pid, skillPda);
   const metaPda = getMetaPda(pid, skillPda);
 
-  let description: string | null = null;
-  let metadata: string | null = null;
-
-  try {
-    const descInfo = await connection.getAccountInfo(descPda);
-    if (descInfo) {
-      const buf = Buffer.from(descInfo.data);
-      const descLen = buf.readUInt16LE(8);
-      description = buf.subarray(10, 10 + descLen).toString("utf-8");
-    }
-  } catch {
-    // account not created yet
+  // Single RPC: fetch skill record, description, and metadata in one call
+  const [skillInfo, descInfo, metaInfo] = await connection.getMultipleAccountsInfo(
+    [skillPda, descPda, metaPda],
+    "confirmed"
+  );
+  if (!skillInfo) {
+    throw new Error(`Skill "${name}" not found`);
   }
 
-  try {
-    const metaInfo = await connection.getAccountInfo(metaPda);
-    if (metaInfo) {
-      const buf = Buffer.from(metaInfo.data);
-      const dataLen = buf.readUInt16LE(8);
-      metadata = buf.subarray(10, 10 + dataLen).toString("utf-8");
-    }
-  } catch {
-    // account not created yet
+  const record = parseSkillRecordData(skillInfo.data);
+
+  let description: string | null = null;
+  if (descInfo) {
+    const buf = Buffer.from(descInfo.data);
+    const descLen = buf.readUInt16LE(8);
+    description = buf.subarray(10, 10 + descLen).toString("utf-8");
+  }
+
+  let metadata: string | null = null;
+  if (metaInfo) {
+    const buf = Buffer.from(metaInfo.data);
+    const dataLen = buf.readUInt16LE(8);
+    metadata = buf.subarray(10, 10 + dataLen).toString("utf-8");
   }
 
   return { record, description, metadata };

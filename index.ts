@@ -219,6 +219,15 @@ export {
   type MessageSignatureStatus,
 } from "./src/bridge";
 
+// Export transaction parser
+export {
+  parseTxFromHash,
+  parseTxResponse,
+  formatParsedTx,
+  type ParsedInstruction,
+  type ParsedTransaction,
+} from "./src/tx_parser";
+
 // Export IDLs and types
 export { default as NaraQuestIDL } from "./src/idls/nara_quest.json";
 export { default as NaraSkillsHubIDL } from "./src/idls/nara_skills_hub.json";
