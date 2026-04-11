@@ -196,19 +196,16 @@ export async function sendTx(
     });
   }
 
-  // Poll for confirmation (avoid confirmTransaction which uses WebSocket)
-  const startTime = Date.now();
+  // Wait a couple of seconds for the validator to see and process the tx,
+  // then poll getSignatureStatuses every 2s until confirmed or timeout.
   const TIMEOUT_MS = 20_000;
-  const POLL_INTERVAL_MS = 1_000;
+  const POLL_INTERVAL_MS = 2_000;
+  const INITIAL_DELAY_MS = 2_000;
 
+  await new Promise((r) => setTimeout(r, INITIAL_DELAY_MS));
+
+  const startTime = Date.now();
   while (Date.now() - startTime < TIMEOUT_MS) {
-    const currentBlockHeight = await connection.getBlockHeight("confirmed");
-    if (currentBlockHeight > lastValidBlockHeight) {
-      throw new Error(
-        `Transaction ${signature} expired: block height exceeded`
-      );
-    }
-
     const statusResult = await connection.getSignatureStatuses([signature]);
     const status = statusResult?.value?.[0];
 
