@@ -109,6 +109,7 @@ console.log(status.deliverySignature);  // destination tx
 | Token | Solana side | Nara side | Decimals |
 |---|---|---|---|
 | USDC | collateral (lock) | synthetic (mint, Token-2022) | 6 |
+| USDT | collateral (lock) | synthetic (mint, Token-2022) | 6 |
 | SOL | native (lamports) | synthetic (mint, Token-2022) | 9 |
 
 Add new tokens at runtime:
