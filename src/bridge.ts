@@ -49,6 +49,8 @@ export interface BridgeTokenSide {
 export interface BridgeTokenConfig {
   symbol: string;
   decimals: number;
+  /** Minimum per-transfer amount in raw units (rejected if below) */
+  minAmount: bigint;
   solana: BridgeTokenSide;
   nara: BridgeTokenSide;
 }
@@ -128,6 +130,7 @@ export const BRIDGE_TOKENS: Record<string, BridgeTokenConfig> = {
   USDC: {
     symbol: "USDC",
     decimals: 6,
+    minAmount: 100_000n, // 0.1 USDC
     solana: {
       warpProgram: new PublicKey("4GcZJTa8s9vxtTz97Vj1RrwKMqPkT3DiiJkvUQDwsuZP"),
       mode: "collateral",
@@ -144,6 +147,7 @@ export const BRIDGE_TOKENS: Record<string, BridgeTokenConfig> = {
   USDT: {
     symbol: "USDT",
     decimals: 6,
+    minAmount: 100_000n, // 0.1 USDT
     solana: {
       warpProgram: new PublicKey("DCTt9H3pwwU89qC3Z4voYNThZypV68AwhYNzMNBxWXoy"),
       mode: "collateral",
@@ -160,6 +164,7 @@ export const BRIDGE_TOKENS: Record<string, BridgeTokenConfig> = {
   SOL: {
     symbol: "SOL",
     decimals: 9,
+    minAmount: 1_000_000n, // 0.001 SOL
     solana: {
       warpProgram: new PublicKey("46MmAWwKRAt9uvn7m44NXbVq2DCWBQE2r1TDw25nyXrt"),
       mode: "native",
@@ -522,6 +527,15 @@ export function makeBridgeIxs(params: BridgeTransferParams): BridgeIxsResult {
   } = params;
 
   if (amount <= 0n) throw new Error("amount must be > 0");
+
+  // Enforce per-token minimum transfer amount
+  const tokenCfg = getToken(token);
+  if (amount < tokenCfg.minAmount) {
+    const min = Number(tokenCfg.minAmount) / Math.pow(10, tokenCfg.decimals);
+    throw new Error(
+      `Bridge amount too small: minimum for ${token} is ${min} (raw ${tokenCfg.minAmount})`
+    );
+  }
 
   const split = skipFee
     ? { feeAmount: 0n, bridgeAmount: amount, feeBps: 0 }
