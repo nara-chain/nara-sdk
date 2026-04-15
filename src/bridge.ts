@@ -51,6 +51,8 @@ export interface BridgeTokenConfig {
   decimals: number;
   /** Minimum per-transfer amount in raw units (rejected if below) */
   minAmount: bigint;
+  /** Minimum fee floor in raw units (fee = max(amount * bps, minFee)) */
+  minFee: bigint;
   solana: BridgeTokenSide;
   nara: BridgeTokenSide;
 }
@@ -130,7 +132,8 @@ export const BRIDGE_TOKENS: Record<string, BridgeTokenConfig> = {
   USDC: {
     symbol: "USDC",
     decimals: 6,
-    minAmount: 100_000n, // 0.1 USDC
+    minAmount: 5_000_000n, // 5 USDC
+    minFee:    500_000n,   // 0.5 USDC (fee floor)
     solana: {
       warpProgram: new PublicKey("4GcZJTa8s9vxtTz97Vj1RrwKMqPkT3DiiJkvUQDwsuZP"),
       mode: "collateral",
@@ -147,7 +150,8 @@ export const BRIDGE_TOKENS: Record<string, BridgeTokenConfig> = {
   USDT: {
     symbol: "USDT",
     decimals: 6,
-    minAmount: 100_000n, // 0.1 USDT
+    minAmount: 5_000_000n, // 5 USDT
+    minFee:    500_000n,   // 0.5 USDT (fee floor)
     solana: {
       warpProgram: new PublicKey("DCTt9H3pwwU89qC3Z4voYNThZypV68AwhYNzMNBxWXoy"),
       mode: "collateral",
@@ -164,7 +168,8 @@ export const BRIDGE_TOKENS: Record<string, BridgeTokenConfig> = {
   SOL: {
     symbol: "SOL",
     decimals: 9,
-    minAmount: 1_000_000n, // 0.001 SOL
+    minAmount: 100_000_000n, // 0.1 SOL
+    minFee:    10_000_000n,  // 0.01 SOL (fee floor)
     solana: {
       warpProgram: new PublicKey("46MmAWwKRAt9uvn7m44NXbVq2DCWBQE2r1TDw25nyXrt"),
       mode: "native",
@@ -326,19 +331,32 @@ export function encodeTransferRemote(
 // ─── Fee calculation ──────────────────────────────────────────────
 
 export interface FeeSplit {
+  /** Total fee (max of percentage and minFee) in raw units */
   feeAmount: bigint;
+  /** Net amount bridged after fee */
   bridgeAmount: bigint;
+  /** Percentage part (bps) used */
   feeBps: number;
+  /** Fee floor in raw units */
+  minFee: bigint;
 }
 
-export function calculateBridgeFee(amount: bigint, feeBps?: number): FeeSplit {
+/**
+ * Calculate the bridge fee: max(amount * bps / 10000, minFee)
+ */
+export function calculateBridgeFee(
+  amount: bigint,
+  feeBps?: number,
+  minFee: bigint = 0n
+): FeeSplit {
   const bps = feeBps ?? DEFAULT_BRIDGE_FEE_BPS;
   if (bps < 0 || bps > BRIDGE_FEE_BPS_DENOMINATOR) {
     throw new Error(`Invalid feeBps: ${bps}`);
   }
-  const feeAmount = (amount * BigInt(bps)) / BigInt(BRIDGE_FEE_BPS_DENOMINATOR);
+  const pctFee = (amount * BigInt(bps)) / BigInt(BRIDGE_FEE_BPS_DENOMINATOR);
+  const feeAmount = pctFee > minFee ? pctFee : minFee;
   const bridgeAmount = amount - feeAmount;
-  return { feeAmount, bridgeAmount, feeBps: bps };
+  return { feeAmount, bridgeAmount, feeBps: bps, minFee };
 }
 
 // ─── Fee instruction builder ──────────────────────────────────────
@@ -538,11 +556,11 @@ export function makeBridgeIxs(params: BridgeTransferParams): BridgeIxsResult {
   }
 
   const split = skipFee
-    ? { feeAmount: 0n, bridgeAmount: amount, feeBps: 0 }
-    : calculateBridgeFee(amount, feeBps);
+    ? { feeAmount: 0n, bridgeAmount: amount, feeBps: 0, minFee: 0n }
+    : calculateBridgeFee(amount, feeBps, tokenCfg.minFee);
 
   if (split.bridgeAmount <= 0n) {
-    throw new Error("bridge amount after fee is zero — increase amount or lower feeBps");
+    throw new Error("bridge amount after fee is zero — increase amount or lower fee");
   }
 
   const recipientForFee = feeRecipient ?? getBridgeFeeRecipient(fromChain);
