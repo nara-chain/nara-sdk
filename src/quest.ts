@@ -435,13 +435,20 @@ export async function submitAnswer(
     if (options.stake === "auto") {
       const quest = await getQuestInfo(connection, wallet, options);
       const stakeInfo = await getStakeInfo(connection, wallet.publicKey, options);
-      const required = quest.effectiveStakeRequirement;
-      const current = stakeInfo?.amount ?? 0;
-      const deficit = required - current;
-      if (deficit > 0) {
-        stakeLamports = new BN(Math.round(deficit * LAMPORTS_PER_SOL));
-      } else {
+      const freeCredits = stakeInfo?.freeCredits ?? 0;
+
+      if (freeCredits > 0) {
+        // 本轮使用免质押额度，不需要补质押
         stakeLamports = new BN(0);
+      } else {
+        const required = quest.effectiveStakeRequirement;
+        const current = stakeInfo?.amount ?? 0;
+        const deficit = required - current;
+        if (deficit > 0) {
+          stakeLamports = new BN(Math.round(deficit * LAMPORTS_PER_SOL));
+        } else {
+          stakeLamports = new BN(0);
+        }
       }
     } else {
       stakeLamports = new BN(Math.round(options.stake * LAMPORTS_PER_SOL));

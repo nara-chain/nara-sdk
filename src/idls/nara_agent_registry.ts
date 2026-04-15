@@ -2514,6 +2514,129 @@ export type NaraAgentRegistry = {
       ]
     },
     {
+      "name": "rejectTwitterWithReason",
+      "discriminator": [
+        3,
+        212,
+        79,
+        37,
+        41,
+        111,
+        209,
+        83
+      ],
+      "accounts": [
+        {
+          "name": "verifier",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "agent",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  103,
+                  101,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "agentId"
+              }
+            ]
+          }
+        },
+        {
+          "name": "twitter",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  119,
+                  105,
+                  116,
+                  116,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "agent"
+              }
+            ]
+          }
+        },
+        {
+          "name": "twitterQueue",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  119,
+                  105,
+                  116,
+                  116,
+                  101,
+                  114,
+                  95,
+                  113,
+                  117,
+                  101,
+                  117,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "agentId",
+          "type": "string"
+        },
+        {
+          "name": "reason",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "setBio",
       "discriminator": [
         196,
@@ -4940,11 +5063,24 @@ export type NaraAgentRegistry = {
             }
           },
           {
+            "name": "rejectionReason",
+            "type": "u64"
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                128
+                96
+              ]
+            }
+          },
+          {
+            "name": "reservedA",
+            "type": {
+              "array": [
+                "u8",
+                24
               ]
             }
           },

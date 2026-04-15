@@ -2508,6 +2508,129 @@
       ]
     },
     {
+      "name": "reject_twitter_with_reason",
+      "discriminator": [
+        3,
+        212,
+        79,
+        37,
+        41,
+        111,
+        209,
+        83
+      ],
+      "accounts": [
+        {
+          "name": "verifier",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "agent",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  103,
+                  101,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "agent_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "twitter",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  119,
+                  105,
+                  116,
+                  116,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "agent"
+              }
+            ]
+          }
+        },
+        {
+          "name": "twitter_queue",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  119,
+                  105,
+                  116,
+                  116,
+                  101,
+                  114,
+                  95,
+                  113,
+                  117,
+                  101,
+                  117,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "agent_id",
+          "type": "string"
+        },
+        {
+          "name": "reason",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "set_bio",
       "discriminator": [
         196,
@@ -4934,11 +5057,24 @@
             }
           },
           {
+            "name": "rejection_reason",
+            "type": "u64"
+          },
+          {
             "name": "_reserved",
             "type": {
               "array": [
                 "u8",
-                128
+                96
+              ]
+            }
+          },
+          {
+            "name": "_reserved_a",
+            "type": {
+              "array": [
+                "u8",
+                24
               ]
             }
           },
