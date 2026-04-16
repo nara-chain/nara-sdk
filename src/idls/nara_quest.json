@@ -761,6 +761,10 @@
         {
           "name": "max_reward_count",
           "type": "u32"
+        },
+        {
+          "name": "free_stake_multiplier",
+          "type": "u32"
         }
       ]
     },
@@ -1910,6 +1914,11 @@
       "code": 6022,
       "name": "InsufficientAirdrop",
       "msg": "Airdrop fund has insufficient balance"
+    },
+    {
+      "code": 6023,
+      "name": "InvalidMultiplier",
+      "msg": "Multiplier must be >= 1"
     }
   ],
   "types": [
@@ -2007,11 +2016,15 @@
             "type": "u32"
           },
           {
+            "name": "free_stake_multiplier",
+            "type": "u32"
+          },
+          {
             "name": "_padding",
             "type": {
               "array": [
                 "u8",
-                20
+                16
               ]
             }
           }
@@ -2049,15 +2062,15 @@
             "type": "u64"
           },
           {
-            "name": "reward_count",
+            "name": "stake_reward_count",
             "type": "u32"
           },
           {
-            "name": "reward_per_winner",
+            "name": "stake_reward_per_winner",
             "type": "u64"
           },
           {
-            "name": "winner_count",
+            "name": "stake_winner_count",
             "type": "u32"
           },
           {
@@ -2081,11 +2094,23 @@
             "type": "u64"
           },
           {
+            "name": "free_reward_count",
+            "type": "u32"
+          },
+          {
+            "name": "free_reward_per_winner",
+            "type": "u64"
+          },
+          {
+            "name": "free_winner_count",
+            "type": "u32"
+          },
+          {
             "name": "_padding",
             "type": {
               "array": [
                 "u8",
-                64
+                48
               ]
             }
           }

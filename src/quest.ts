@@ -45,11 +45,18 @@ export interface QuestInfo {
   round: string;
   question: string;
   answerHash: number[];
-  rewardPerWinner: number;
+  /** Total reward pool for the round (stake + free), in NARA */
   totalReward: number;
-  rewardCount: number;
-  winnerCount: number;
-  remainingSlots: number;
+  /** Stake-gated reward bucket */
+  stakeRewardCount: number;
+  stakeWinnerCount: number;
+  stakeRewardPerWinner: number;
+  stakeRemainingSlots: number;
+  /** Credit (free-stake) reward bucket — consumed by stakeInfo.freeCredits */
+  creditRewardCount: number;
+  creditWinnerCount: number;
+  creditRewardPerWinner: number;
+  creditRemainingSlots: number;
   difficulty: number;
   deadline: number;
   timeRemaining: number;
@@ -323,16 +330,25 @@ export async function getQuestInfo(
     stakeHigh, stakeLow, createdAtMs, decayMs, nowMs
   );
 
+  const stakeRewardCount = pool.stakeRewardCount;
+  const stakeWinnerCount = pool.stakeWinnerCount;
+  const creditRewardCount = pool.freeRewardCount;
+  const creditWinnerCount = pool.freeWinnerCount;
+
   return {
     active,
     round: pool.round.toString(),
     question: pool.question,
     answerHash: Array.from(pool.answerHash),
-    rewardPerWinner: pool.rewardPerWinner.toNumber() / LAMPORTS_PER_SOL,
     totalReward: pool.rewardAmount.toNumber() / LAMPORTS_PER_SOL,
-    rewardCount: pool.rewardCount,
-    winnerCount: pool.winnerCount,
-    remainingSlots: Math.max(0, pool.rewardCount - pool.winnerCount),
+    stakeRewardCount,
+    stakeWinnerCount,
+    stakeRewardPerWinner: pool.stakeRewardPerWinner.toNumber() / LAMPORTS_PER_SOL,
+    stakeRemainingSlots: Math.max(0, stakeRewardCount - stakeWinnerCount),
+    creditRewardCount,
+    creditWinnerCount,
+    creditRewardPerWinner: pool.freeRewardPerWinner.toNumber() / LAMPORTS_PER_SOL,
+    creditRemainingSlots: Math.max(0, creditRewardCount - creditWinnerCount),
     difficulty: pool.difficulty,
     deadline,
     timeRemaining: secsLeft,
@@ -758,17 +774,21 @@ export async function initializeQuest(
 
 /**
  * Set the reward config (authority only).
+ *
+ * @param freeStakeMultiplier - Multiplier for users answering with free credits
+ *                              vs stake-based winners (must be >= 1).
  */
 export async function setRewardConfig(
   connection: Connection,
   wallet: Keypair,
   minRewardCount: number,
   maxRewardCount: number,
+  freeStakeMultiplier: number,
   options?: QuestOptions
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
   const ix = await program.methods
-    .setRewardConfig(minRewardCount, maxRewardCount)
+    .setRewardConfig(minRewardCount, maxRewardCount, freeStakeMultiplier)
     .accounts({ authority: wallet.publicKey } as any)
     .instruction();
   return sendTx(connection, wallet, [ix]);
@@ -888,6 +908,7 @@ export async function getQuestConfig(
   stakeAuthority: PublicKey;
   airdropAmount: number;
   maxAirdropCount: number;
+  freeStakeMultiplier: number;
 }> {
   const kp = Keypair.generate();
   const program = createProgram(connection, kp, options?.programId);
@@ -912,6 +933,7 @@ export async function getQuestConfig(
     stakeAuthority: config.stakeAuthority,
     airdropAmount: Number(config.airdropAmount.toString()),
     maxAirdropCount: config.maxAirdropCount,
+    freeStakeMultiplier: config.freeStakeMultiplier,
   };
 }
 

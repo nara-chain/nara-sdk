@@ -767,6 +767,10 @@ export type NaraQuest = {
         {
           "name": "maxRewardCount",
           "type": "u32"
+        },
+        {
+          "name": "freeStakeMultiplier",
+          "type": "u32"
         }
       ]
     },
@@ -1916,6 +1920,11 @@ export type NaraQuest = {
       "code": 6022,
       "name": "insufficientAirdrop",
       "msg": "Airdrop fund has insufficient balance"
+    },
+    {
+      "code": 6023,
+      "name": "invalidMultiplier",
+      "msg": "Multiplier must be >= 1"
     }
   ],
   "types": [
@@ -2013,11 +2022,15 @@ export type NaraQuest = {
             "type": "u32"
           },
           {
+            "name": "freeStakeMultiplier",
+            "type": "u32"
+          },
+          {
             "name": "padding",
             "type": {
               "array": [
                 "u8",
-                20
+                16
               ]
             }
           }
@@ -2055,15 +2068,15 @@ export type NaraQuest = {
             "type": "u64"
           },
           {
-            "name": "rewardCount",
+            "name": "stakeRewardCount",
             "type": "u32"
           },
           {
-            "name": "rewardPerWinner",
+            "name": "stakeRewardPerWinner",
             "type": "u64"
           },
           {
-            "name": "winnerCount",
+            "name": "stakeWinnerCount",
             "type": "u32"
           },
           {
@@ -2087,11 +2100,23 @@ export type NaraQuest = {
             "type": "u64"
           },
           {
+            "name": "freeRewardCount",
+            "type": "u32"
+          },
+          {
+            "name": "freeRewardPerWinner",
+            "type": "u64"
+          },
+          {
+            "name": "freeWinnerCount",
+            "type": "u32"
+          },
+          {
             "name": "padding",
             "type": {
               "array": [
                 "u8",
-                64
+                48
               ]
             }
           }

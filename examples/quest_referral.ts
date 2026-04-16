@@ -149,7 +149,7 @@ async function main() {
 
   console.log(`Question: ${quest.question}`);
   console.log(`Round: #${quest.round}`);
-  console.log(`Remaining slots: ${quest.remainingSlots}`);
+  console.log(`Stake slots: ${quest.stakeRemainingSlots}/${quest.stakeRewardCount}  |  Credit slots: ${quest.creditRemainingSlots}/${quest.creditRewardCount}`);
 
   if (quest.expired) {
     console.log("Quest expired. Exiting.");
