@@ -38,7 +38,7 @@ const connection = new Connection('https://mainnet-api.nara.build');
 
 ## Cross-chain Bridge
 
-Bridge tokens between Solana and Nara with built-in 0.5% fee extraction.
+Bridge tokens between Solana and Nara with built-in fee extraction (0.5% or per-token floor, whichever is higher).
 
 ### One-step bridge
 
@@ -106,29 +106,36 @@ console.log(status.deliverySignature);  // destination tx
 
 ### Supported tokens
 
-| Token | Solana side | Nara side | Decimals |
-|---|---|---|---|
-| USDC | collateral (lock) | synthetic (mint, Token-2022) | 6 |
-| USDT | collateral (lock) | synthetic (mint, Token-2022) | 6 |
-| SOL | native (lamports) | synthetic (mint, Token-2022) | 9 |
+| Token | Solana side | Nara side | Decimals | Min bridge | Min fee |
+|---|---|---|---|---|---|
+| USDC | collateral (lock) | synthetic (mint, Token-2022) | 6 | 5 USDC | 0.5 USDC |
+| USDT | collateral (lock) | synthetic (mint, Token-2022) | 6 | 5 USDT | 0.5 USDT |
+| SOL | native (lamports) | synthetic (mint, Token-2022) | 9 | 0.1 SOL | 0.01 SOL |
+
+Requests below the per-token `minAmount` are rejected client-side.
 
 Add new tokens at runtime:
 
 ```ts
 import { registerBridgeToken } from 'nara-sdk';
 
-registerBridgeToken('USDT', {
-  symbol: 'USDT',
+registerBridgeToken('XYZ', {
+  symbol: 'XYZ',
   decimals: 6,
+  minAmount: 5_000_000n,   // 5.0
+  minFee:    500_000n,     // 0.5 (fee floor)
   solana: { warpProgram, mode: 'collateral', mint, tokenProgram },
-  nara: { warpProgram, mode: 'synthetic', mint, tokenProgram },
+  nara:   { warpProgram, mode: 'synthetic',  mint, tokenProgram },
 });
 ```
 
 ### Fee configuration
 
-Default fee: **0.5%** (50 bps), deducted from the bridged amount on the source chain.
-Fee recipients are chain-specific (one per source chain).
+Fee formula: **`fee = max(amount × 0.5%, token.minFee)`** — deducted from the
+bridged amount on the source chain in the same transaction. Below the
+crossover (100 USDC / 2 SOL) the floor dominates; above, the percentage wins.
+
+Fee recipients are chain-specific (one per source chain):
 
 ```ts
 import { setBridgeFeeRecipient, getBridgeFeeRecipient } from 'nara-sdk';
@@ -143,8 +150,8 @@ const recipient = getBridgeFeeRecipient('solana');  // PublicKey
 // Or per-call
 await bridgeTransfer(conn, wallet, {
   ...params,
-  feeBps: 100,                      // 1%
-  feeRecipient: customPubkey,       // override
+  feeBps: 100,                      // 1% (overrides default 50 bps)
+  feeRecipient: customPubkey,       // override recipient
   skipFee: true,                    // or skip entirely
 });
 ```
@@ -175,13 +182,30 @@ await approveTweet(connection, verifierWallet, agentId, tweetId, freeCredits);
 
 ## Quest (PoMI)
 
+Each round has two independent reward channels:
+- **Stake channel** — requires active stake (auto-decays from `stakeHigh` to `stakeLow`)
+- **Credit channel** — consumes `stakeInfo.freeCredits` (admin-assigned, no stake required)
+
 ```ts
-import { getQuestInfo, generateProof, submitAnswer } from 'nara-sdk';
+import { getQuestInfo, getStakeInfo, generateProof, submitAnswer } from 'nara-sdk';
 
 const quest = await getQuestInfo(connection);
+console.log(`Stake slots: ${quest.stakeRemainingSlots}/${quest.stakeRewardCount}`);
+console.log(`Credit slots: ${quest.creditRemainingSlots}/${quest.creditRewardCount}`);
+
 const proof = await generateProof(quest.question, answer);
-const sig = await submitAnswer(connection, wallet, proof);
+
+// stake: "auto" — SDK skips stake ix if user has freeCredits, else tops up
+// stake to the current effectiveStakeRequirement
+const sig = await submitAnswer(connection, wallet, proof, "", "", {
+  stake: "auto",
+});
 ```
+
+Relevant `QuestInfo` fields:
+- `stakeRewardCount` / `stakeWinnerCount` / `stakeRewardPerWinner` / `stakeRemainingSlots`
+- `creditRewardCount` / `creditWinnerCount` / `creditRewardPerWinner` / `creditRemainingSlots`
+- `stakeHigh` / `stakeLow` / `effectiveStakeRequirement` — current required stake
 
 ## Documentation
 
