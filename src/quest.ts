@@ -47,15 +47,11 @@ export interface QuestInfo {
   answerHash: number[];
   /** Total reward pool for the round, in NARA */
   totalReward: number;
-  /**
-   * Boost PoMI winner bucket (single reward track).
-   * Named `stake*` for chain-field parity — the underlying pool fields are still
-   * `stake_reward_count` / `stake_reward_per_winner` / `stake_winner_count`.
-   */
-  stakeRewardCount: number;
-  stakeWinnerCount: number;
-  stakeRewardPerWinner: number;
-  stakeRemainingSlots: number;
+  /** Boost PoMI winner bucket (single reward track). */
+  boostRewardCount: number;
+  boostWinnerCount: number;
+  boostRewardPerWinner: number;
+  boostRemainingSlots: number;
   difficulty: number;
   deadline: number;
   timeRemaining: number;
@@ -336,8 +332,8 @@ export async function getQuestInfo(
     stakeHigh, stakeLow, createdAtMs, decayMs, nowMs
   );
 
-  const stakeRewardCount = pool.stakeRewardCount;
-  const stakeWinnerCount = pool.stakeWinnerCount;
+  const boostRewardCount = pool.boostRewardCount;
+  const boostWinnerCount = pool.boostWinnerCount;
 
   return {
     active,
@@ -345,10 +341,10 @@ export async function getQuestInfo(
     question: pool.question,
     answerHash: Array.from(pool.answerHash),
     totalReward: pool.rewardAmount.toNumber() / LAMPORTS_PER_SOL,
-    stakeRewardCount,
-    stakeWinnerCount,
-    stakeRewardPerWinner: pool.stakeRewardPerWinner.toNumber() / LAMPORTS_PER_SOL,
-    stakeRemainingSlots: Math.max(0, stakeRewardCount - stakeWinnerCount),
+    boostRewardCount,
+    boostWinnerCount,
+    boostRewardPerWinner: pool.boostRewardPerWinner.toNumber() / LAMPORTS_PER_SOL,
+    boostRemainingSlots: Math.max(0, boostRewardCount - boostWinnerCount),
     difficulty: pool.difficulty,
     deadline,
     timeRemaining: secsLeft,

@@ -2067,15 +2067,15 @@
             "type": "u64"
           },
           {
-            "name": "stake_reward_count",
+            "name": "boost_reward_count",
             "type": "u32"
           },
           {
-            "name": "stake_reward_per_winner",
+            "name": "boost_reward_per_winner",
             "type": "u64"
           },
           {
-            "name": "stake_winner_count",
+            "name": "boost_winner_count",
             "type": "u32"
           },
           {

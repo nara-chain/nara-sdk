@@ -2073,15 +2073,15 @@ export type NaraQuest = {
             "type": "u64"
           },
           {
-            "name": "stakeRewardCount",
+            "name": "boostRewardCount",
             "type": "u32"
           },
           {
-            "name": "stakeRewardPerWinner",
+            "name": "boostRewardPerWinner",
             "type": "u64"
           },
           {
-            "name": "stakeWinnerCount",
+            "name": "boostWinnerCount",
             "type": "u32"
           },
           {

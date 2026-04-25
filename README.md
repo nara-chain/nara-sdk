@@ -199,7 +199,7 @@ import {
 } from 'nara-sdk';
 
 const quest = await getQuestInfo(connection);
-console.log(`Boost slots: ${quest.stakeRemainingSlots}/${quest.stakeRewardCount}`);
+console.log(`Boost slots: ${quest.boostRemainingSlots}/${quest.boostRewardCount}`);
 
 const stakeInfo = await getStakeInfo(connection, wallet.publicKey);
 console.log(`Your boost credits: ${stakeInfo?.boostCredits ?? 0}`);
@@ -216,9 +216,8 @@ const { signature } = await submitAnswer(connection, wallet, proof.solana);
 
 Relevant `QuestInfo` fields:
 
-- `stakeRewardCount` / `stakeWinnerCount` / `stakeRewardPerWinner` / `stakeRemainingSlots`
-  — the single Boost PoMI winner bucket (field names retain the `stake*` prefix
-  for chain parity)
+- `boostRewardCount` / `boostWinnerCount` / `boostRewardPerWinner` / `boostRemainingSlots`
+  — the single Boost PoMI winner bucket
 - `round` / `question` / `answerHash` / `deadline` / `timeRemaining`
 
 Legacy staking (`stake` / `unstake`) remains callable so existing stakers can
