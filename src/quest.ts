@@ -105,13 +105,6 @@ export interface QuestOptions {
   circuitWasmPath?: string | Uint8Array;
   /** File path (Node.js), URL string, or pre-loaded Uint8Array (browser) */
   zkeyPath?: string | Uint8Array;
-  /**
-   * @deprecated Boost PoMI no longer gates on stake; credits are the sole admission ticket.
-   * If set, a legacy `stake` instruction is still bundled before `submit_answer`:
-   *   - number: stake the exact NARA amount
-   *   - "auto": no-op (kept for API compatibility)
-   */
-  stake?: "auto" | number;
 }
 
 export interface ActivityLog {
@@ -454,24 +447,12 @@ export async function submitAnswer(
     );
   }
 
-  // Legacy optional stake instruction (staking channel is closed but still callable)
-  let stakeIx: any = null;
-  if (typeof options?.stake === "number" && options.stake > 0) {
-    const stakeLamports = new BN(Math.round(options.stake * LAMPORTS_PER_SOL));
-    stakeIx = await program.methods
-      .stake(stakeLamports)
-      .accounts({ user: wallet.publicKey } as any)
-      .instruction();
-  }
-
   const submitIx = await program.methods
     .submitAnswer(proof.proofA as any, proof.proofB as any, proof.proofC as any, agent, model)
     .accounts({ user: wallet.publicKey, payer: wallet.publicKey })
     .instruction();
 
-  const ixs = [];
-  if (stakeIx) ixs.push(stakeIx);
-  ixs.push(submitIx);
+  const ixs = [submitIx];
 
   if (activityLog) {
     const { makeLogActivityIx, makeLogActivityWithReferralIx } = await import("./agent_registry");

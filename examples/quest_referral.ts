@@ -208,7 +208,7 @@ async function main() {
     proof.solana,
     mainAgentId,
     "integration-test",
-    { stake: "auto" }, // auto-stake if needed
+    undefined,
     {
       agentId: mainAgentId,
       model: "integration-test",
