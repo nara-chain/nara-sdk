@@ -1887,8 +1887,8 @@
     },
     {
       "code": 6017,
-      "name": "FreeCreditsOverflow",
-      "msg": "Free credits overflow"
+      "name": "BoostCreditsOverflow",
+      "msg": "Boost credits overflow"
     },
     {
       "code": 6018,
@@ -1919,6 +1919,11 @@
       "code": 6023,
       "name": "InvalidMultiplier",
       "msg": "Multiplier must be >= 1"
+    },
+    {
+      "code": 6024,
+      "name": "NoCredits",
+      "msg": "Boost PoMI requires free credits"
     }
   ],
   "types": [
@@ -2127,15 +2132,19 @@
             "type": "u64"
           },
           {
-            "name": "free_credits",
+            "name": "boost_credits",
             "type": "u32"
+          },
+          {
+            "name": "user_pubkey",
+            "type": "pubkey"
           },
           {
             "name": "_padding",
             "type": {
               "array": [
                 "u8",
-                60
+                28
               ]
             }
           }

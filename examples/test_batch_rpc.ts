@@ -90,7 +90,7 @@ async function main() {
     const stake = await getStakeInfo(conn, user);
     console.log("[2] getStakeInfo ✓");
     if (stake) {
-      console.log(`    amount=${stake.amount} NARA stakeRound=${stake.stakeRound} freeCredits=${stake.freeCredits}`);
+      console.log(`    amount=${stake.amount} NARA stakeRound=${stake.stakeRound} boostCredits=${stake.boostCredits}`);
     } else {
       console.log(`    no stake record for ${user.toBase58()}`);
     }

@@ -14,6 +14,7 @@ import * as anchor from "@coral-xyz/anchor";
 import { Program, AnchorProvider, Wallet } from "@coral-xyz/anchor";
 import BN from "bn.js";
 import { getAssociatedTokenAddressSync, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
+import bs58 from "bs58";
 import type { NaraAgentRegistry } from "./idls/nara_agent_registry";
 import { DEFAULT_AGENT_REGISTRY_PROGRAM_ID } from "./constants";
 import { sendTx } from "./tx";
@@ -340,6 +341,43 @@ export async function getAgentRecord(
     throw new Error(`Agent "${agentId}" not found`);
   }
   return parseAgentRecordData(accountInfo.data);
+}
+
+/** AgentState account discriminator (from IDL). */
+const AGENT_STATE_DISCRIMINATOR = Buffer.from([254, 187, 98, 119, 228, 48, 47, 49]);
+
+/**
+ * List all agent IDs owned by a given authority.
+ * Scans the program via `getProgramAccounts` with memcmp filters on the
+ * account discriminator and the `authority` field (offset 8).
+ * Uses `dataSlice` to return only the `agent_id` portion — cheap on bandwidth.
+ */
+export async function listAgentsByAuthority(
+  connection: Connection,
+  authority: PublicKey,
+  options?: AgentRegistryOptions
+): Promise<string[]> {
+  const pid = new PublicKey(options?.programId ?? DEFAULT_AGENT_REGISTRY_PROGRAM_ID);
+
+  // AgentState layout (after 8-byte discriminator):
+  //   32 authority | 32 pending_buffer | 32 memory |
+  //   8 created_at | 8 updated_at |
+  //   4 version | 4 agent_id_len | 32 agent_id | ...
+  // Absolute offsets: authority=8, agent_id_len=124, agent_id=128
+  const accounts = await connection.getProgramAccounts(pid, {
+    commitment: "confirmed",
+    filters: [
+      { memcmp: { offset: 0, bytes: bs58.encode(AGENT_STATE_DISCRIMINATOR) } },
+      { memcmp: { offset: 8, bytes: authority.toBase58() } },
+    ],
+    dataSlice: { offset: 124, length: 36 },
+  });
+
+  return accounts.map(({ account }) => {
+    const data = Buffer.from(account.data);
+    const agentIdLen = data.readUInt32LE(0);
+    return data.subarray(4, 4 + agentIdLen).toString("utf-8");
+  });
 }
 
 /**
@@ -1512,7 +1550,7 @@ export async function unbindTwitter(
 /**
  * Verify an agent's twitter (verifier-only).
  * Awards verification reward and points to the agent owner.
- * @param freeStakeDelta - If provided, also adjusts free stake credits for the agent owner in the same tx.
+ * @param boostCreditsDelta - If provided, also adjusts boost credits for the agent owner in the same tx.
  */
 export async function verifyTwitter(
   connection: Connection,
@@ -1520,8 +1558,8 @@ export async function verifyTwitter(
   agentId: string,
   username: string,
   options?: AgentRegistryOptions,
-  freeStakeDelta?: number,
-  freeStakeReason?: string
+  boostCreditsDelta?: number,
+  boostCreditsReason?: string
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
   const agentPda = getAgentPda(program.programId, agentId);
@@ -1546,12 +1584,12 @@ export async function verifyTwitter(
     .instruction();
 
   const ixs = [ix];
-  if (freeStakeDelta !== undefined && freeStakeDelta !== 0) {
-    const { makeAdjustFreeStakeIx } = await import("./quest");
-    const freeStakeIx = await makeAdjustFreeStakeIx(
-      connection, wallet.publicKey, authority, freeStakeDelta, freeStakeReason ?? ""
+  if (boostCreditsDelta !== undefined && boostCreditsDelta !== 0) {
+    const { makeAdjustBoostCreditsIx } = await import("./quest");
+    const boostCreditsIx = await makeAdjustBoostCreditsIx(
+      connection, wallet.publicKey, authority, boostCreditsDelta, boostCreditsReason ?? ""
     );
-    ixs.push(freeStakeIx);
+    ixs.push(boostCreditsIx);
   }
 
   return sendTx(connection, wallet, ixs);
@@ -1577,7 +1615,7 @@ export async function rejectTwitter(
 /**
  * Approve a previously rejected twitter verification (verifier-only).
  * Awards verification reward and points to the agent owner.
- * @param freeStakeDelta - If provided, also adjusts free stake credits for the agent owner in the same tx.
+ * @param boostCreditsDelta - If provided, also adjusts boost credits for the agent owner in the same tx.
  */
 export async function approveRejectedTwitter(
   connection: Connection,
@@ -1585,8 +1623,8 @@ export async function approveRejectedTwitter(
   agentId: string,
   username: string,
   options?: AgentRegistryOptions,
-  freeStakeDelta?: number,
-  freeStakeReason?: string
+  boostCreditsDelta?: number,
+  boostCreditsReason?: string
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
   const agentPda = getAgentPda(program.programId, agentId);
@@ -1610,12 +1648,12 @@ export async function approveRejectedTwitter(
     .instruction();
 
   const ixs = [ix];
-  if (freeStakeDelta !== undefined && freeStakeDelta !== 0) {
-    const { makeAdjustFreeStakeIx } = await import("./quest");
-    const freeStakeIx = await makeAdjustFreeStakeIx(
-      connection, wallet.publicKey, authority, freeStakeDelta, freeStakeReason ?? ""
+  if (boostCreditsDelta !== undefined && boostCreditsDelta !== 0) {
+    const { makeAdjustBoostCreditsIx } = await import("./quest");
+    const boostCreditsIx = await makeAdjustBoostCreditsIx(
+      connection, wallet.publicKey, authority, boostCreditsDelta, boostCreditsReason ?? ""
     );
-    ixs.push(freeStakeIx);
+    ixs.push(boostCreditsIx);
   }
 
   return sendTx(connection, wallet, ixs);
@@ -1624,7 +1662,7 @@ export async function approveRejectedTwitter(
 /**
  * Approve a tweet verification (verifier-only).
  * Awards tweet verify reward and points to the agent owner.
- * @param freeStakeDelta - If provided, also adjusts free stake credits for the agent owner in the same tx.
+ * @param boostCreditsDelta - If provided, also adjusts boost credits for the agent owner in the same tx.
  */
 export async function approveTweet(
   connection: Connection,
@@ -1632,8 +1670,8 @@ export async function approveTweet(
   agentId: string,
   tweetId: bigint,
   options?: AgentRegistryOptions,
-  freeStakeDelta?: number,
-  freeStakeReason?: string
+  boostCreditsDelta?: number,
+  boostCreditsReason?: string
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
   const agentPda = getAgentPda(program.programId, agentId);
@@ -1658,12 +1696,12 @@ export async function approveTweet(
     .instruction();
 
   const ixs = [ix];
-  if (freeStakeDelta !== undefined && freeStakeDelta !== 0) {
-    const { makeAdjustFreeStakeIx } = await import("./quest");
-    const freeStakeIx = await makeAdjustFreeStakeIx(
-      connection, wallet.publicKey, authority, freeStakeDelta, freeStakeReason ?? ""
+  if (boostCreditsDelta !== undefined && boostCreditsDelta !== 0) {
+    const { makeAdjustBoostCreditsIx } = await import("./quest");
+    const boostCreditsIx = await makeAdjustBoostCreditsIx(
+      connection, wallet.publicKey, authority, boostCreditsDelta, boostCreditsReason ?? ""
     );
-    ixs.push(freeStakeIx);
+    ixs.push(boostCreditsIx);
   }
 
   return sendTx(connection, wallet, ixs);

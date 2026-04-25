@@ -45,41 +45,42 @@ export interface QuestInfo {
   round: string;
   question: string;
   answerHash: number[];
-  /** Total reward pool for the round (stake + free), in NARA */
+  /** Total reward pool for the round, in NARA */
   totalReward: number;
-  /** Stake-gated reward bucket */
+  /**
+   * Boost PoMI winner bucket (single reward track).
+   * Named `stake*` for chain-field parity — the underlying pool fields are still
+   * `stake_reward_count` / `stake_reward_per_winner` / `stake_winner_count`.
+   */
   stakeRewardCount: number;
   stakeWinnerCount: number;
   stakeRewardPerWinner: number;
   stakeRemainingSlots: number;
-  /** Credit (free-stake) reward bucket — consumed by stakeInfo.freeCredits */
-  creditRewardCount: number;
-  creditWinnerCount: number;
-  creditRewardPerWinner: number;
-  creditRemainingSlots: number;
   difficulty: number;
   deadline: number;
   timeRemaining: number;
   expired: boolean;
-  /** High stake requirement for the current round (in NARA, decays over time) */
+  /** @deprecated Legacy stake decay field. Staking channel is closed; value is informational only. */
   stakeHigh: number;
-  /** Low stake requirement for the current round (in NARA, floor after decay) */
+  /** @deprecated Legacy stake decay field. Staking channel is closed; value is informational only. */
   stakeLow: number;
-  /** Running average participant stake for the current round (in NARA) */
+  /** @deprecated Legacy field. Pool no longer accumulates avg participant stake. */
   avgParticipantStake: number;
   /** Unix timestamp when the current question was created */
   createdAt: number;
-  /** Current effective stake requirement after parabolic decay (in NARA) */
+  /** @deprecated Legacy stake requirement. Boost PoMI gates on boost credits, not stake. */
   effectiveStakeRequirement: number;
 }
 
 export interface StakeInfo {
-  /** Current staked amount (in NARA) */
+  /** Legacy staked amount (in NARA). Staking channel is closed; use `unstake` to withdraw. */
   amount: number;
-  /** Round when the stake was made */
+  /** Round when the stake was last touched */
   stakeRound: number;
-  /** Free stake credits (admin-assigned, bypass stake requirement) */
-  freeCredits: number;
+  /** Boost PoMI credits — required to submit an answer (consumed -1 per successful reward) */
+  boostCredits: number;
+  /** On-chain record of the user's pubkey (populated on stake / adjust / answer) */
+  userPubkey: string;
 }
 
 export interface ZkProof {
@@ -108,7 +109,12 @@ export interface QuestOptions {
   circuitWasmPath?: string | Uint8Array;
   /** File path (Node.js), URL string, or pre-loaded Uint8Array (browser) */
   zkeyPath?: string | Uint8Array;
-  /** "auto" = auto top-up stake to stakeRequirement; number = stake exact NARA amount */
+  /**
+   * @deprecated Boost PoMI no longer gates on stake; credits are the sole admission ticket.
+   * If set, a legacy `stake` instruction is still bundled before `submit_answer`:
+   *   - number: stake the exact NARA amount
+   *   - "auto": no-op (kept for API compatibility)
+   */
   stake?: "auto" | number;
 }
 
@@ -332,8 +338,6 @@ export async function getQuestInfo(
 
   const stakeRewardCount = pool.stakeRewardCount;
   const stakeWinnerCount = pool.stakeWinnerCount;
-  const creditRewardCount = pool.freeRewardCount;
-  const creditWinnerCount = pool.freeWinnerCount;
 
   return {
     active,
@@ -345,10 +349,6 @@ export async function getQuestInfo(
     stakeWinnerCount,
     stakeRewardPerWinner: pool.stakeRewardPerWinner.toNumber() / LAMPORTS_PER_SOL,
     stakeRemainingSlots: Math.max(0, stakeRewardCount - stakeWinnerCount),
-    creditRewardCount,
-    creditWinnerCount,
-    creditRewardPerWinner: pool.freeRewardPerWinner.toNumber() / LAMPORTS_PER_SOL,
-    creditRemainingSlots: Math.max(0, creditRewardCount - creditWinnerCount),
     difficulty: pool.difficulty,
     deadline,
     timeRemaining: secsLeft,
@@ -430,6 +430,12 @@ export async function generateProof(
 
 /**
  * Submit a quest answer on-chain (direct submission, requires gas).
+ *
+ * Boost PoMI: the caller must have at least 1 boost credit; on a successful
+ * reward, 1 credit is consumed. Without credits the on-chain program rejects
+ * with `NoCredits` (6024); this function pre-checks and throws early with a
+ * clearer message.
+ *
  * If `activityLog` is provided, a logActivity instruction from the Agent Registry
  * is appended to the same transaction.
  */
@@ -444,37 +450,22 @@ export async function submitAnswer(
 ): Promise<SubmitAnswerResult> {
   const program = createProgram(connection, wallet, options?.programId);
 
-  // Build optional stake instruction
-  let stakeIx: any = null;
-  if (options?.stake !== undefined) {
-    let stakeLamports: BN;
-    if (options.stake === "auto") {
-      const quest = await getQuestInfo(connection, wallet, options);
-      const stakeInfo = await getStakeInfo(connection, wallet.publicKey, options);
-      const freeCredits = stakeInfo?.freeCredits ?? 0;
+  // Boost PoMI: fail fast if the user has no credits
+  const stakeInfo = await getStakeInfo(connection, wallet.publicKey, options);
+  if (!stakeInfo || stakeInfo.boostCredits <= 0) {
+    throw new Error(
+      "Boost PoMI requires boost credits. Your balance is 0 — acquire credits before submitting an answer."
+    );
+  }
 
-      if (freeCredits > 0) {
-        // 本轮使用免质押额度，不需要补质押
-        stakeLamports = new BN(0);
-      } else {
-        const required = quest.effectiveStakeRequirement;
-        const current = stakeInfo?.amount ?? 0;
-        const deficit = required - current;
-        if (deficit > 0) {
-          stakeLamports = new BN(Math.round(deficit * LAMPORTS_PER_SOL));
-        } else {
-          stakeLamports = new BN(0);
-        }
-      }
-    } else {
-      stakeLamports = new BN(Math.round(options.stake * LAMPORTS_PER_SOL));
-    }
-    if (!stakeLamports.isZero()) {
-      stakeIx = await program.methods
-        .stake(stakeLamports)
-        .accounts({ user: wallet.publicKey } as any)
-        .instruction();
-    }
+  // Legacy optional stake instruction (staking channel is closed but still callable)
+  let stakeIx: any = null;
+  if (typeof options?.stake === "number" && options.stake > 0) {
+    const stakeLamports = new BN(Math.round(options.stake * LAMPORTS_PER_SOL));
+    stakeIx = await program.methods
+      .stake(stakeLamports)
+      .accounts({ user: wallet.publicKey } as any)
+      .instruction();
   }
 
   const submitIx = await program.methods
@@ -581,11 +572,18 @@ export async function parseQuestReward(
   let winner = "";
   const logs: string[] = txInfo.meta?.logMessages ?? [];
   for (const log of logs) {
-    const m = log.match(/reward (\d+) lamports \(winner (\d+\/\d+)\)/);
+    // Boost PoMI success:       "Boost PoMI reward N lamports (winner W/T, credits remaining: R)"
+    // Vault-insufficient notice: "Answer verified but vault insufficient (winner W/T, credit preserved)"
+    const m = log.match(/reward (\d+) lamports \(winner (\d+\/\d+)/);
     if (m) {
       rewardLamports = parseInt(m[1]!);
       winner = m[2]!;
       break;
+    }
+    const v = log.match(/vault insufficient \(winner (\d+\/\d+)/);
+    if (v) {
+      winner = v[1]!;
+      // rewardLamports stays 0
     }
   }
 
@@ -693,7 +691,8 @@ export async function getStakeInfo(
   return {
     amount,
     stakeRound: record.stakeRound.toNumber(),
-    freeCredits: record.freeCredits,
+    boostCredits: record.boostCredits,
+    userPubkey: record.userPubkey.toBase58(),
   };
 }
 
@@ -775,15 +774,16 @@ export async function initializeQuest(
 /**
  * Set the reward config (authority only).
  *
- * @param freeStakeMultiplier - Multiplier for users answering with free credits
- *                              vs stake-based winners (must be >= 1).
+ * @param freeStakeMultiplier - Legacy field (>= 1). Currently unused by Boost PoMI
+ *                              reward calculation; defaults to 1. Kept exposed in
+ *                              case chain re-enables it.
  */
 export async function setRewardConfig(
   connection: Connection,
   wallet: Keypair,
   minRewardCount: number,
   maxRewardCount: number,
-  freeStakeMultiplier: number,
+  freeStakeMultiplier: number = 1,
   options?: QuestOptions
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
@@ -908,7 +908,6 @@ export async function getQuestConfig(
   stakeAuthority: PublicKey;
   airdropAmount: number;
   maxAirdropCount: number;
-  freeStakeMultiplier: number;
 }> {
   const kp = Keypair.generate();
   const program = createProgram(connection, kp, options?.programId);
@@ -933,7 +932,6 @@ export async function getQuestConfig(
     stakeAuthority: config.stakeAuthority,
     airdropAmount: Number(config.airdropAmount.toString()),
     maxAirdropCount: config.maxAirdropCount,
-    freeStakeMultiplier: config.freeStakeMultiplier,
   };
 }
 
@@ -955,9 +953,10 @@ export async function setStakeAuthority(
 }
 
 /**
- * Build an adjustFreeStake instruction without sending it.
+ * Build an adjustBoostCredits instruction without sending it.
+ * (Wraps the on-chain `adjustFreeStake` instruction — legacy chain-side name.)
  */
-export async function makeAdjustFreeStakeIx(
+export async function makeAdjustBoostCreditsIx(
   connection: Connection,
   caller: PublicKey,
   user: PublicKey,
@@ -973,12 +972,12 @@ export async function makeAdjustFreeStakeIx(
 }
 
 /**
- * Adjust free stake credits for a user (stake_authority or authority only).
- * @param user - The user whose free credits to adjust
+ * Adjust boost credits for a user (stake_authority or authority only).
+ * @param user - The user whose boost credits to adjust
  * @param delta - Amount to adjust (positive to add, negative to remove)
  * @param reason - Reason for the adjustment (logged on-chain)
  */
-export async function adjustFreeStake(
+export async function adjustBoostCredits(
   connection: Connection,
   wallet: Keypair,
   user: PublicKey,
@@ -986,7 +985,7 @@ export async function adjustFreeStake(
   reason: string,
   options?: QuestOptions
 ): Promise<string> {
-  const ix = await makeAdjustFreeStakeIx(connection, wallet.publicKey, user, delta, reason, options);
+  const ix = await makeAdjustBoostCreditsIx(connection, wallet.publicKey, user, delta, reason, options);
   return sendTx(connection, wallet, [ix]);
 }
 

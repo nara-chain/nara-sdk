@@ -1893,8 +1893,8 @@ export type NaraQuest = {
     },
     {
       "code": 6017,
-      "name": "freeCreditsOverflow",
-      "msg": "Free credits overflow"
+      "name": "boostCreditsOverflow",
+      "msg": "Boost credits overflow"
     },
     {
       "code": 6018,
@@ -1925,6 +1925,11 @@ export type NaraQuest = {
       "code": 6023,
       "name": "invalidMultiplier",
       "msg": "Multiplier must be >= 1"
+    },
+    {
+      "code": 6024,
+      "name": "noCredits",
+      "msg": "Boost PoMI requires free credits"
     }
   ],
   "types": [
@@ -2133,15 +2138,19 @@ export type NaraQuest = {
             "type": "u64"
           },
           {
-            "name": "freeCredits",
+            "name": "boostCredits",
             "type": "u32"
+          },
+          {
+            "name": "userPubkey",
+            "type": "pubkey"
           },
           {
             "name": "padding",
             "type": {
               "array": [
                 "u8",
-                60
+                28
               ]
             }
           }
