@@ -1960,6 +1960,74 @@
       ]
     },
     {
+      "name": "register_agent_index",
+      "discriminator": [
+        193,
+        207,
+        223,
+        226,
+        130,
+        228,
+        161,
+        207
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "agent"
+          ]
+        },
+        {
+          "name": "agent"
+        },
+        {
+          "name": "agent_index",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  103,
+                  101,
+                  110,
+                  116,
+                  95,
+                  105,
+                  110,
+                  100,
+                  101,
+                  120
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "index_str"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "index_str",
+          "type": "string"
+        }
+      ]
+    },
+    {
       "name": "register_agent_with_referral",
       "discriminator": [
         12,
@@ -3541,6 +3609,73 @@
       ]
     },
     {
+      "name": "unregister_agent_index",
+      "discriminator": [
+        245,
+        18,
+        46,
+        12,
+        147,
+        155,
+        203,
+        169
+      ],
+      "accounts": [
+        {
+          "name": "rent_destination",
+          "writable": true
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "agent"
+          ]
+        },
+        {
+          "name": "agent"
+        },
+        {
+          "name": "agent_index",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  103,
+                  101,
+                  110,
+                  116,
+                  95,
+                  105,
+                  110,
+                  100,
+                  101,
+                  120
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "index_str"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "index_str",
+          "type": "string"
+        }
+      ]
+    },
+    {
       "name": "update_activity_config",
       "discriminator": [
         167,
@@ -4503,6 +4638,19 @@
   ],
   "accounts": [
     {
+      "name": "AgentIndex",
+      "discriminator": [
+        241,
+        154,
+        35,
+        103,
+        180,
+        141,
+        49,
+        179
+      ]
+    },
+    {
       "name": "AgentState",
       "discriminator": [
         254,
@@ -4875,6 +5023,21 @@
       "code": 6047,
       "name": "TwitterNotRejected",
       "msg": "Twitter binding is not in rejected status"
+    },
+    {
+      "code": 6048,
+      "name": "AgentIndexEmpty",
+      "msg": "Agent index string is empty"
+    },
+    {
+      "code": 6049,
+      "name": "AgentIndexTooLong",
+      "msg": "Agent index string too long"
+    },
+    {
+      "code": 6050,
+      "name": "AgentIndexMismatch",
+      "msg": "Agent index does not belong to the given agent"
     }
   ],
   "types": [
@@ -4918,6 +5081,69 @@
           {
             "name": "timestamp",
             "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AgentIndex",
+      "docs": [
+        "Per-agent custom index entry. Lets an agent claim arbitrary index strings",
+        "that point back to its agent_id.",
+        "Seeds: [SEED_AGENT_INDEX, index_str.as_bytes()]"
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "agent",
+            "docs": [
+              "The AgentState PDA that owns this index entry"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "created_at",
+            "docs": [
+              "Unix timestamp when this index was registered"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "agent_id_len",
+            "docs": [
+              "Length of the agent_id stored below"
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "_padding",
+            "type": "u32"
+          },
+          {
+            "name": "agent_id",
+            "docs": [
+              "agent_id of the owning agent (zero-padded)"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "_reserved",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
           }
         ]
       }

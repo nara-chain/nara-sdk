@@ -1966,6 +1966,74 @@ export type NaraAgentRegistry = {
       ]
     },
     {
+      "name": "registerAgentIndex",
+      "discriminator": [
+        193,
+        207,
+        223,
+        226,
+        130,
+        228,
+        161,
+        207
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "agent"
+          ]
+        },
+        {
+          "name": "agent"
+        },
+        {
+          "name": "agentIndex",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  103,
+                  101,
+                  110,
+                  116,
+                  95,
+                  105,
+                  110,
+                  100,
+                  101,
+                  120
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "indexStr"
+              }
+            ]
+          }
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "indexStr",
+          "type": "string"
+        }
+      ]
+    },
+    {
       "name": "registerAgentWithReferral",
       "discriminator": [
         12,
@@ -3547,6 +3615,73 @@ export type NaraAgentRegistry = {
       ]
     },
     {
+      "name": "unregisterAgentIndex",
+      "discriminator": [
+        245,
+        18,
+        46,
+        12,
+        147,
+        155,
+        203,
+        169
+      ],
+      "accounts": [
+        {
+          "name": "rentDestination",
+          "writable": true
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "agent"
+          ]
+        },
+        {
+          "name": "agent"
+        },
+        {
+          "name": "agentIndex",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  103,
+                  101,
+                  110,
+                  116,
+                  95,
+                  105,
+                  110,
+                  100,
+                  101,
+                  120
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "indexStr"
+              }
+            ]
+          }
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "indexStr",
+          "type": "string"
+        }
+      ]
+    },
+    {
       "name": "updateActivityConfig",
       "discriminator": [
         167,
@@ -4509,6 +4644,19 @@ export type NaraAgentRegistry = {
   ],
   "accounts": [
     {
+      "name": "agentIndex",
+      "discriminator": [
+        241,
+        154,
+        35,
+        103,
+        180,
+        141,
+        49,
+        179
+      ]
+    },
+    {
       "name": "agentState",
       "discriminator": [
         254,
@@ -4881,6 +5029,21 @@ export type NaraAgentRegistry = {
       "code": 6047,
       "name": "twitterNotRejected",
       "msg": "Twitter binding is not in rejected status"
+    },
+    {
+      "code": 6048,
+      "name": "agentIndexEmpty",
+      "msg": "Agent index string is empty"
+    },
+    {
+      "code": 6049,
+      "name": "agentIndexTooLong",
+      "msg": "Agent index string too long"
+    },
+    {
+      "code": 6050,
+      "name": "agentIndexMismatch",
+      "msg": "Agent index does not belong to the given agent"
     }
   ],
   "types": [
@@ -4924,6 +5087,69 @@ export type NaraAgentRegistry = {
           {
             "name": "timestamp",
             "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "agentIndex",
+      "docs": [
+        "Per-agent custom index entry. Lets an agent claim arbitrary index strings",
+        "that point back to its agent_id.",
+        "Seeds: [SEED_AGENT_INDEX, index_str.as_bytes()]"
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "agent",
+            "docs": [
+              "The AgentState PDA that owns this index entry"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "createdAt",
+            "docs": [
+              "Unix timestamp when this index was registered"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "agentIdLen",
+            "docs": [
+              "Length of the agent_id stored below"
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "padding",
+            "type": "u32"
+          },
+          {
+            "name": "agentId",
+            "docs": [
+              "agent_id of the owning agent (zero-padded)"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
           }
         ]
       }

@@ -56,6 +56,14 @@ export interface AgentInfo {
   metadata: string | null;
 }
 
+export interface AgentIndexInfo {
+  /** Agent PDA that owns this index entry */
+  agent: PublicKey;
+  /** agent_id of the owning agent */
+  agentId: string;
+  createdAt: number;
+}
+
 export interface AgentTwitterInfo {
   agentId: string;
   status: number;
@@ -176,6 +184,14 @@ function getRefereeActivityMintPda(programId: PublicKey): PublicKey {
 function getTreasuryPda(programId: PublicKey): PublicKey {
   const [pda] = PublicKey.findProgramAddressSync(
     [Buffer.from("treasury")],
+    programId
+  );
+  return pda;
+}
+
+function getAgentIndexPda(programId: PublicKey, indexStr: string): PublicKey {
+  const [pda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("agent_index"), Buffer.from(indexStr)],
     programId
   );
   return pda;
@@ -1082,6 +1098,133 @@ export async function setReferral(
       referralAgent,
       referralAuthority,
       referralRefereeAccount,
+    } as any)
+    .instruction();
+  return sendTx(connection, wallet, [ix]);
+}
+
+// ─── Agent Index ────────────────────────────────────────────────
+
+/**
+ * Parse AgentIndex account data (bytemuck zero-copy layout).
+ * Layout (after 8-byte discriminator):
+ *   32 agent | 8 created_at | 4 agent_id_len | 4 _padding |
+ *   32 agent_id | 32 _reserved
+ */
+function parseAgentIndexData(data: Buffer | Uint8Array): AgentIndexInfo {
+  const buf = Buffer.from(data);
+  let offset = 8;
+  const agent = new PublicKey(buf.subarray(offset, offset + 32)); offset += 32;
+  const createdAt = Number(buf.readBigInt64LE(offset)); offset += 8;
+  const agentIdLen = buf.readUInt32LE(offset); offset += 4;
+  offset += 4; // _padding
+  const agentId = buf.subarray(offset, offset + agentIdLen).toString("utf-8");
+  return { agent, agentId, createdAt };
+}
+
+/**
+ * Look up an agent_index entry by index string.
+ * Returns null if no agent has claimed this index.
+ */
+export async function getAgentIndex(
+  connection: Connection,
+  indexStr: string,
+  options?: AgentRegistryOptions
+): Promise<AgentIndexInfo | null> {
+  const pid = new PublicKey(options?.programId ?? DEFAULT_AGENT_REGISTRY_PROGRAM_ID);
+  const pda = getAgentIndexPda(pid, indexStr);
+  const accountInfo = await connection.getAccountInfo(pda);
+  if (!accountInfo) return null;
+  return parseAgentIndexData(accountInfo.data);
+}
+
+/**
+ * Build a registerAgentIndex instruction without sending it.
+ */
+export async function makeRegisterAgentIndexIx(
+  connection: Connection,
+  payer: PublicKey,
+  authority: PublicKey,
+  agentId: string,
+  indexStr: string,
+  options?: AgentRegistryOptions
+): Promise<TransactionInstruction> {
+  const program = createProgram(connection, Keypair.generate(), options?.programId);
+  const agent = getAgentPda(program.programId, agentId);
+  return program.methods
+    .registerAgentIndex(indexStr)
+    .accounts({ payer, authority, agent } as any)
+    .instruction();
+}
+
+/**
+ * Register a custom index string that points to the given agent.
+ * The (index_str → agent_id) mapping can be looked up via getAgentIndex.
+ */
+export async function registerAgentIndex(
+  connection: Connection,
+  wallet: Keypair,
+  agentId: string,
+  indexStr: string,
+  options?: AgentRegistryOptions,
+  payer?: Keypair
+): Promise<{ signature: string; agentIndexPda: PublicKey }> {
+  const payerKp = payer ?? wallet;
+  const program = createProgram(connection, payerKp, options?.programId);
+  const agent = getAgentPda(program.programId, agentId);
+  const ix = await program.methods
+    .registerAgentIndex(indexStr)
+    .accounts({
+      payer: payerKp.publicKey,
+      authority: wallet.publicKey,
+      agent,
+    } as any)
+    .instruction();
+  const signers = payer && !payer.publicKey.equals(wallet.publicKey) ? [wallet] : [];
+  const signature = await sendTx(connection, payerKp, [ix], signers);
+  return { signature, agentIndexPda: getAgentIndexPda(program.programId, indexStr) };
+}
+
+/**
+ * Build an unregisterAgentIndex instruction without sending it.
+ */
+export async function makeUnregisterAgentIndexIx(
+  connection: Connection,
+  rentDestination: PublicKey,
+  authority: PublicKey,
+  agentId: string,
+  indexStr: string,
+  options?: AgentRegistryOptions
+): Promise<TransactionInstruction> {
+  const program = createProgram(connection, Keypair.generate(), options?.programId);
+  const agent = getAgentPda(program.programId, agentId);
+  return program.methods
+    .unregisterAgentIndex(indexStr)
+    .accounts({ rentDestination, authority, agent } as any)
+    .instruction();
+}
+
+/**
+ * Unregister a custom index string and reclaim rent.
+ * The signing wallet must be the agent's authority.
+ * @param rentDestination - Account to receive reclaimed rent (defaults to wallet pubkey).
+ */
+export async function unregisterAgentIndex(
+  connection: Connection,
+  wallet: Keypair,
+  agentId: string,
+  indexStr: string,
+  options?: AgentRegistryOptions,
+  rentDestination?: PublicKey
+): Promise<string> {
+  const program = createProgram(connection, wallet, options?.programId);
+  const agent = getAgentPda(program.programId, agentId);
+  const ix = await program.methods
+    .unregisterAgentIndex(indexStr)
+    .accounts({
+      rentDestination: rentDestination ?? wallet.publicKey,
+      authority: wallet.publicKey,
+      agent,
     } as any)
     .instruction();
   return sendTx(connection, wallet, [ix]);

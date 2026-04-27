@@ -134,6 +134,12 @@ export {
   makeLogActivityIx,
   makeLogActivityWithReferralIx,
   setReferral,
+  // Agent index
+  getAgentIndex,
+  registerAgentIndex,
+  unregisterAgentIndex,
+  makeRegisterAgentIndexIx,
+  makeUnregisterAgentIndexIx,
   // Twitter verification
   getAgentTwitter,
   getTweetVerify,
@@ -163,6 +169,7 @@ export {
   withdrawTwitterVerifyFees,
   type AgentRecord,
   type AgentInfo,
+  type AgentIndexInfo,
   type AgentTwitterInfo,
   type TweetVerifyInfo,
   type TweetRecordInfo,
