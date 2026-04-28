@@ -1989,6 +1989,9 @@
         },
         {
           "name": "agent_index",
+          "docs": [
+            "Forward-lookup PDA: keyed by hash(index_str). Globally unique per index_str."
+          ],
           "writable": true,
           "pda": {
             "seeds": [
@@ -2010,7 +2013,44 @@
               },
               {
                 "kind": "arg",
-                "path": "index_str"
+                "path": "index_hash"
+              }
+            ]
+          }
+        },
+        {
+          "name": "reverse_index",
+          "docs": [
+            "Reverse-lookup PDA: keyed by (agent, hash(index_str)). One per agent per index."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  118,
+                  101,
+                  114,
+                  115,
+                  101,
+                  95,
+                  105,
+                  110,
+                  100,
+                  101,
+                  120
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "agent"
+              },
+              {
+                "kind": "arg",
+                "path": "index_hash"
               }
             ]
           }
@@ -2024,6 +2064,15 @@
         {
           "name": "index_str",
           "type": "string"
+        },
+        {
+          "name": "index_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
         }
       ]
     },
@@ -3658,7 +3707,44 @@
               },
               {
                 "kind": "arg",
-                "path": "index_str"
+                "path": "index_hash"
+              }
+            ]
+          }
+        },
+        {
+          "name": "reverse_index",
+          "docs": [
+            "Reverse-lookup PDA, closed alongside the main index entry."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  118,
+                  101,
+                  114,
+                  115,
+                  101,
+                  95,
+                  105,
+                  110,
+                  100,
+                  101,
+                  120
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "agent"
+              },
+              {
+                "kind": "arg",
+                "path": "index_hash"
               }
             ]
           }
@@ -3670,8 +3756,13 @@
       ],
       "args": [
         {
-          "name": "index_str",
-          "type": "string"
+          "name": "index_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
         }
       ]
     },
@@ -4703,6 +4794,19 @@
       ]
     },
     {
+      "name": "ReverseIndex",
+      "discriminator": [
+        130,
+        180,
+        241,
+        155,
+        193,
+        32,
+        173,
+        207
+      ]
+    },
+    {
       "name": "TweetRecord",
       "discriminator": [
         13,
@@ -5038,6 +5142,11 @@
       "code": 6050,
       "name": "AgentIndexMismatch",
       "msg": "Agent index does not belong to the given agent"
+    },
+    {
+      "code": 6051,
+      "name": "AgentIndexHashMismatch",
+      "msg": "Agent index hash does not match the provided index string"
     }
   ],
   "types": [
@@ -5473,6 +5582,71 @@
               "array": [
                 "u8",
                 96
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "ReverseIndex",
+      "docs": [
+        "Reverse-lookup record: given an agent, list all index strings registered for it.",
+        "Seeds: [SEED_REVERSE_INDEX, agent_pda.as_ref(), index_str.as_bytes()]",
+        "",
+        "Clients can fetch all reverse_index entries for a given agent via",
+        "`getProgramAccounts` with a memcmp filter on the `agent` field."
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "agent",
+            "docs": [
+              "The AgentState PDA that owns this reverse-index entry"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "created_at",
+            "docs": [
+              "Unix timestamp when this entry was created"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "index_len",
+            "docs": [
+              "Length of the index string stored below"
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "_padding",
+            "type": "u32"
+          },
+          {
+            "name": "index",
+            "docs": [
+              "Index string (zero-padded), up to 128 bytes"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                128
+              ]
+            }
+          },
+          {
+            "name": "_reserved",
+            "type": {
+              "array": [
+                "u8",
+                32
               ]
             }
           }

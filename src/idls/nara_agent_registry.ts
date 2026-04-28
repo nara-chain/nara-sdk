@@ -1995,6 +1995,9 @@ export type NaraAgentRegistry = {
         },
         {
           "name": "agentIndex",
+          "docs": [
+            "Forward-lookup PDA: keyed by hash(index_str). Globally unique per index_str."
+          ],
           "writable": true,
           "pda": {
             "seeds": [
@@ -2016,7 +2019,44 @@ export type NaraAgentRegistry = {
               },
               {
                 "kind": "arg",
-                "path": "indexStr"
+                "path": "indexHash"
+              }
+            ]
+          }
+        },
+        {
+          "name": "reverseIndex",
+          "docs": [
+            "Reverse-lookup PDA: keyed by (agent, hash(index_str)). One per agent per index."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  118,
+                  101,
+                  114,
+                  115,
+                  101,
+                  95,
+                  105,
+                  110,
+                  100,
+                  101,
+                  120
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "agent"
+              },
+              {
+                "kind": "arg",
+                "path": "indexHash"
               }
             ]
           }
@@ -2030,6 +2070,15 @@ export type NaraAgentRegistry = {
         {
           "name": "indexStr",
           "type": "string"
+        },
+        {
+          "name": "indexHash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
         }
       ]
     },
@@ -3664,7 +3713,44 @@ export type NaraAgentRegistry = {
               },
               {
                 "kind": "arg",
-                "path": "indexStr"
+                "path": "indexHash"
+              }
+            ]
+          }
+        },
+        {
+          "name": "reverseIndex",
+          "docs": [
+            "Reverse-lookup PDA, closed alongside the main index entry."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  118,
+                  101,
+                  114,
+                  115,
+                  101,
+                  95,
+                  105,
+                  110,
+                  100,
+                  101,
+                  120
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "agent"
+              },
+              {
+                "kind": "arg",
+                "path": "indexHash"
               }
             ]
           }
@@ -3676,8 +3762,13 @@ export type NaraAgentRegistry = {
       ],
       "args": [
         {
-          "name": "indexStr",
-          "type": "string"
+          "name": "indexHash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
         }
       ]
     },
@@ -4709,6 +4800,19 @@ export type NaraAgentRegistry = {
       ]
     },
     {
+      "name": "reverseIndex",
+      "discriminator": [
+        130,
+        180,
+        241,
+        155,
+        193,
+        32,
+        173,
+        207
+      ]
+    },
+    {
       "name": "tweetRecord",
       "discriminator": [
         13,
@@ -5044,6 +5148,11 @@ export type NaraAgentRegistry = {
       "code": 6050,
       "name": "agentIndexMismatch",
       "msg": "Agent index does not belong to the given agent"
+    },
+    {
+      "code": 6051,
+      "name": "agentIndexHashMismatch",
+      "msg": "Agent index hash does not match the provided index string"
     }
   ],
   "types": [
@@ -5479,6 +5588,71 @@ export type NaraAgentRegistry = {
               "array": [
                 "u8",
                 96
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "reverseIndex",
+      "docs": [
+        "Reverse-lookup record: given an agent, list all index strings registered for it.",
+        "Seeds: [SEED_REVERSE_INDEX, agent_pda.as_ref(), index_str.as_bytes()]",
+        "",
+        "Clients can fetch all reverse_index entries for a given agent via",
+        "`getProgramAccounts` with a memcmp filter on the `agent` field."
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "agent",
+            "docs": [
+              "The AgentState PDA that owns this reverse-index entry"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "createdAt",
+            "docs": [
+              "Unix timestamp when this entry was created"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "indexLen",
+            "docs": [
+              "Length of the index string stored below"
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "padding",
+            "type": "u32"
+          },
+          {
+            "name": "index",
+            "docs": [
+              "Index string (zero-padded), up to 128 bytes"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                128
+              ]
+            }
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": [
+                "u8",
+                32
               ]
             }
           }

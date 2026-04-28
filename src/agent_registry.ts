@@ -14,6 +14,7 @@ import * as anchor from "@coral-xyz/anchor";
 import { Program, AnchorProvider, Wallet } from "@coral-xyz/anchor";
 import BN from "bn.js";
 import { getAssociatedTokenAddressSync, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
+import { createHash } from "node:crypto";
 import bs58 from "bs58";
 import type { NaraAgentRegistry } from "./idls/nara_agent_registry";
 import { DEFAULT_AGENT_REGISTRY_PROGRAM_ID } from "./constants";
@@ -61,6 +62,14 @@ export interface AgentIndexInfo {
   agent: PublicKey;
   /** agent_id of the owning agent */
   agentId: string;
+  createdAt: number;
+}
+
+export interface ReverseIndexInfo {
+  /** Agent PDA that owns this reverse-index entry */
+  agent: PublicKey;
+  /** Index string registered for the agent (UTF-8, up to 128 bytes) */
+  index: string;
   createdAt: number;
 }
 
@@ -189,9 +198,30 @@ function getTreasuryPda(programId: PublicKey): PublicKey {
   return pda;
 }
 
-function getAgentIndexPda(programId: PublicKey, indexStr: string): PublicKey {
+/**
+ * SHA-256 of an index string. The chain uses this 32-byte hash both as a PDA
+ * seed (lifting the 32-byte raw-seed limit) and as an integrity check against
+ * the supplied `index_str` (errors with `AgentIndexHashMismatch` on mismatch).
+ */
+export function computeIndexHash(indexStr: string): Buffer {
+  return createHash("sha256").update(indexStr, "utf8").digest();
+}
+
+function getAgentIndexPda(programId: PublicKey, indexHash: Buffer | Uint8Array): PublicKey {
   const [pda] = PublicKey.findProgramAddressSync(
-    [Buffer.from("agent_index"), Buffer.from(indexStr)],
+    [Buffer.from("agent_index"), Buffer.from(indexHash)],
+    programId
+  );
+  return pda;
+}
+
+function getReverseIndexPda(
+  programId: PublicKey,
+  agentPda: PublicKey,
+  indexHash: Buffer | Uint8Array
+): PublicKey {
+  const [pda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("reverse_index"), agentPda.toBytes(), Buffer.from(indexHash)],
     programId
   );
   return pda;
@@ -730,6 +760,23 @@ export async function deleteAgent(
 // ─── Bio & Metadata ─────────────────────────────────────────────
 
 /**
+ * Build a setBio instruction without sending it.
+ */
+export async function makeSetBioIx(
+  connection: Connection,
+  authority: PublicKey,
+  agentId: string,
+  bio: string,
+  options?: AgentRegistryOptions
+): Promise<TransactionInstruction> {
+  const program = createProgram(connection, Keypair.generate(), options?.programId);
+  return program.methods
+    .setBio(agentId, bio)
+    .accounts({ authority } as any)
+    .instruction();
+}
+
+/**
  * Set or update the agent's bio.
  */
 export async function setBio(
@@ -739,12 +786,25 @@ export async function setBio(
   bio: string,
   options?: AgentRegistryOptions
 ): Promise<string> {
-  const program = createProgram(connection, wallet, options?.programId);
-  const ix = await program.methods
-    .setBio(agentId, bio)
-    .accounts({ authority: wallet.publicKey } as any)
-    .instruction();
+  const ix = await makeSetBioIx(connection, wallet.publicKey, agentId, bio, options);
   return sendTx(connection, wallet, [ix]);
+}
+
+/**
+ * Build a setMetadata instruction without sending it.
+ */
+export async function makeSetMetadataIx(
+  connection: Connection,
+  authority: PublicKey,
+  agentId: string,
+  data: string,
+  options?: AgentRegistryOptions
+): Promise<TransactionInstruction> {
+  const program = createProgram(connection, Keypair.generate(), options?.programId);
+  return program.methods
+    .setMetadata(agentId, data)
+    .accounts({ authority } as any)
+    .instruction();
 }
 
 /**
@@ -757,11 +817,7 @@ export async function setMetadata(
   data: string,
   options?: AgentRegistryOptions
 ): Promise<string> {
-  const program = createProgram(connection, wallet, options?.programId);
-  const ix = await program.methods
-    .setMetadata(agentId, data)
-    .accounts({ authority: wallet.publicKey } as any)
-    .instruction();
+  const ix = await makeSetMetadataIx(connection, wallet.publicKey, agentId, data, options);
   return sendTx(connection, wallet, [ix]);
 }
 
@@ -1123,6 +1179,23 @@ function parseAgentIndexData(data: Buffer | Uint8Array): AgentIndexInfo {
 }
 
 /**
+ * Parse ReverseIndex account data (bytemuck zero-copy layout).
+ * Layout (after 8-byte discriminator):
+ *   32 agent | 8 created_at | 4 index_len | 4 _padding |
+ *   128 index | 32 _reserved
+ */
+function parseReverseIndexData(data: Buffer | Uint8Array): ReverseIndexInfo {
+  const buf = Buffer.from(data);
+  let offset = 8;
+  const agent = new PublicKey(buf.subarray(offset, offset + 32)); offset += 32;
+  const createdAt = Number(buf.readBigInt64LE(offset)); offset += 8;
+  const indexLen = buf.readUInt32LE(offset); offset += 4;
+  offset += 4; // _padding
+  const index = buf.subarray(offset, offset + indexLen).toString("utf-8");
+  return { agent, index, createdAt };
+}
+
+/**
  * Look up an agent_index entry by index string.
  * Returns null if no agent has claimed this index.
  */
@@ -1132,10 +1205,37 @@ export async function getAgentIndex(
   options?: AgentRegistryOptions
 ): Promise<AgentIndexInfo | null> {
   const pid = new PublicKey(options?.programId ?? DEFAULT_AGENT_REGISTRY_PROGRAM_ID);
-  const pda = getAgentIndexPda(pid, indexStr);
+  const pda = getAgentIndexPda(pid, computeIndexHash(indexStr));
   const accountInfo = await connection.getAccountInfo(pda);
   if (!accountInfo) return null;
   return parseAgentIndexData(accountInfo.data);
+}
+
+/** ReverseIndex account discriminator (from IDL). */
+const REVERSE_INDEX_DISCRIMINATOR = Buffer.from([130, 180, 241, 155, 193, 32, 173, 207]);
+
+/**
+ * List all index strings registered for a given agent.
+ * Scans the program via `getProgramAccounts` with memcmp filters on the
+ * ReverseIndex discriminator and the `agent` field (offset 8).
+ */
+export async function listIndexesByAgent(
+  connection: Connection,
+  agentId: string,
+  options?: AgentRegistryOptions
+): Promise<ReverseIndexInfo[]> {
+  const pid = new PublicKey(options?.programId ?? DEFAULT_AGENT_REGISTRY_PROGRAM_ID);
+  const agentPda = getAgentPda(pid, agentId);
+
+  const accounts = await connection.getProgramAccounts(pid, {
+    commitment: "confirmed",
+    filters: [
+      { memcmp: { offset: 0, bytes: bs58.encode(REVERSE_INDEX_DISCRIMINATOR) } },
+      { memcmp: { offset: 8, bytes: agentPda.toBase58() } },
+    ],
+  });
+
+  return accounts.map(({ account }) => parseReverseIndexData(account.data));
 }
 
 /**
@@ -1151,15 +1251,17 @@ export async function makeRegisterAgentIndexIx(
 ): Promise<TransactionInstruction> {
   const program = createProgram(connection, Keypair.generate(), options?.programId);
   const agent = getAgentPda(program.programId, agentId);
+  const indexHash = computeIndexHash(indexStr);
   return program.methods
-    .registerAgentIndex(indexStr)
+    .registerAgentIndex(indexStr, Array.from(indexHash))
     .accounts({ payer, authority, agent } as any)
     .instruction();
 }
 
 /**
  * Register a custom index string that points to the given agent.
- * The (index_str → agent_id) mapping can be looked up via getAgentIndex.
+ * The (index_str → agent_id) mapping can be looked up via getAgentIndex;
+ * the reverse (agent → all index_strs) via listIndexesByAgent.
  */
 export async function registerAgentIndex(
   connection: Connection,
@@ -1168,12 +1270,13 @@ export async function registerAgentIndex(
   indexStr: string,
   options?: AgentRegistryOptions,
   payer?: Keypair
-): Promise<{ signature: string; agentIndexPda: PublicKey }> {
+): Promise<{ signature: string; agentIndexPda: PublicKey; reverseIndexPda: PublicKey }> {
   const payerKp = payer ?? wallet;
   const program = createProgram(connection, payerKp, options?.programId);
   const agent = getAgentPda(program.programId, agentId);
+  const indexHash = computeIndexHash(indexStr);
   const ix = await program.methods
-    .registerAgentIndex(indexStr)
+    .registerAgentIndex(indexStr, Array.from(indexHash))
     .accounts({
       payer: payerKp.publicKey,
       authority: wallet.publicKey,
@@ -1182,7 +1285,11 @@ export async function registerAgentIndex(
     .instruction();
   const signers = payer && !payer.publicKey.equals(wallet.publicKey) ? [wallet] : [];
   const signature = await sendTx(connection, payerKp, [ix], signers);
-  return { signature, agentIndexPda: getAgentIndexPda(program.programId, indexStr) };
+  return {
+    signature,
+    agentIndexPda: getAgentIndexPda(program.programId, indexHash),
+    reverseIndexPda: getReverseIndexPda(program.programId, agent, indexHash),
+  };
 }
 
 /**
@@ -1198,8 +1305,9 @@ export async function makeUnregisterAgentIndexIx(
 ): Promise<TransactionInstruction> {
   const program = createProgram(connection, Keypair.generate(), options?.programId);
   const agent = getAgentPda(program.programId, agentId);
+  const indexHash = computeIndexHash(indexStr);
   return program.methods
-    .unregisterAgentIndex(indexStr)
+    .unregisterAgentIndex(Array.from(indexHash))
     .accounts({ rentDestination, authority, agent } as any)
     .instruction();
 }
@@ -1219,8 +1327,9 @@ export async function unregisterAgentIndex(
 ): Promise<string> {
   const program = createProgram(connection, wallet, options?.programId);
   const agent = getAgentPda(program.programId, agentId);
+  const indexHash = computeIndexHash(indexStr);
   const ix = await program.methods
-    .unregisterAgentIndex(indexStr)
+    .unregisterAgentIndex(Array.from(indexHash))
     .accounts({
       rentDestination: rentDestination ?? wallet.publicKey,
       authority: wallet.publicKey,
