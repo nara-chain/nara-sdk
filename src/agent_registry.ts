@@ -14,7 +14,7 @@ import * as anchor from "@coral-xyz/anchor";
 import { Program, AnchorProvider, Wallet } from "@coral-xyz/anchor";
 import BN from "bn.js";
 import { getAssociatedTokenAddressSync, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
-import { createHash } from "node:crypto";
+import { blake3 } from "@noble/hashes/blake3";
 import bs58 from "bs58";
 import type { NaraAgentRegistry } from "./idls/nara_agent_registry";
 import { DEFAULT_AGENT_REGISTRY_PROGRAM_ID } from "./constants";
@@ -199,12 +199,12 @@ function getTreasuryPda(programId: PublicKey): PublicKey {
 }
 
 /**
- * SHA-256 of an index string. The chain uses this 32-byte hash both as a PDA
+ * BLAKE3 of an index string. The chain uses this 32-byte hash both as a PDA
  * seed (lifting the 32-byte raw-seed limit) and as an integrity check against
  * the supplied `index_str` (errors with `AgentIndexHashMismatch` on mismatch).
  */
 export function computeIndexHash(indexStr: string): Buffer {
-  return createHash("sha256").update(indexStr, "utf8").digest();
+  return Buffer.from(blake3(Buffer.from(indexStr, "utf8")));
 }
 
 function getAgentIndexPda(programId: PublicKey, indexHash: Buffer | Uint8Array): PublicKey {
