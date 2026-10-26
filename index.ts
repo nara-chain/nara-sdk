@@ -16,8 +16,6 @@ export {
   DEFAULT_AGENT_REGISTRY_PROGRAM_ID,
   DEFAULT_ALT_ADDRESS,
   DEFAULT_BRIDGE_FEE_BPS,
-  DEFAULT_BRIDGE_FEE_RECIPIENT_SOLANA,
-  DEFAULT_BRIDGE_FEE_RECIPIENT_NARA,
   BRIDGE_FEE_BPS_DENOMINATOR,
 } from "./src/constants";
 
@@ -198,9 +196,9 @@ export {
   BRIDGE_TOKENS,
   // Token registry
   registerBridgeToken,
-  // Fee recipient runtime override
-  setBridgeFeeRecipient,
-  getBridgeFeeRecipient,
+  // On-chain fee charged by the destination warp route
+  deriveFeeConfigPda,
+  getBridgeFeeConfig,
   // PDA helpers
   deriveOutboxPda,
   deriveDispatchAuthorityPda,
@@ -212,7 +210,6 @@ export {
   encodeTransferRemote,
   // Fee + ix builders
   calculateBridgeFee,
-  makeBridgeFeeIxs,
   makeTransferRemoteIx,
   makeBridgeIxs,
   // High level
@@ -228,6 +225,7 @@ export {
   type BridgeIxsResult,
   type BridgeTransferResult,
   type FeeSplit,
+  type BridgeFeeConfig,
   type MessageStatus,
   type ValidatorSignature,
   type MessageSignatureStatus,

@@ -48,24 +48,11 @@ export const DEFAULT_ALT_ADDRESS = process.env.ALT_ADDRESS || "3uw7RatGTB4hdHnuV
 
 /**
  * Bridge fee in basis points (1 bps = 0.01%). 50 = 0.5%.
- * Deducted from the bridged amount and transferred to the chain-specific
- * fee recipient in the same transaction.
+ * Deducted by the destination warp route as it releases the tokens, so the
+ * sender dispatches the full amount and the recipient gets the remainder.
  */
 export const DEFAULT_BRIDGE_FEE_BPS = 50;
 
 /** BPS denominator (10000 = 100%) */
 export const BRIDGE_FEE_BPS_DENOMINATOR = 10000;
 
-/**
- * Default fee recipient pubkey on Solana (when bridging FROM Solana).
- * Override at runtime via setBridgeFeeRecipient("solana", ...).
- */
-export const DEFAULT_BRIDGE_FEE_RECIPIENT_SOLANA =
-  "HaPQTvGJBunoWA3AyyWRL9etVEbQWsXVoj3fHpBprLy5";
-
-/**
- * Default fee recipient pubkey on Nara (when bridging FROM Nara).
- * Override at runtime via setBridgeFeeRecipient("nara", ...).
- */
-export const DEFAULT_BRIDGE_FEE_RECIPIENT_NARA =
-  "FERLFwBpCyoEuvFP68eP6Fv4FCVocnNyyFUCYwpfmjqn";

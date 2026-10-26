@@ -1,8 +1,10 @@
 /**
  * Cross-chain bridge SDK between Nara and Solana via Hyperlane warp routes.
  *
- * Supports two assets out of the box (USDC, SOL) in both directions, with
- * an in-tx fee deduction (default 0.5%) sent to BRIDGE_FEE_RECIPIENT.
+ * Supports USDC, USDT and SOL in both directions. The full amount leaves the
+ * sender: the bridge fee is deducted on the destination chain by the warp
+ * route as it releases the tokens. The rate is unchanged (0.5%, 0.5 floor), so
+ * `calculateBridgeFee` still gives the amount the recipient will receive.
  *
  * Adding a new asset:
  *   1. Append a new entry to BRIDGE_TOKENS with {symbol, decimals, solana, nara}.
@@ -18,8 +20,6 @@ import {
   TransactionInstruction,
 } from "@solana/web3.js";
 import {
-  createAssociatedTokenAccountIdempotentInstruction,
-  createTransferCheckedInstruction,
   getAssociatedTokenAddressSync,
   TOKEN_2022_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
@@ -27,8 +27,6 @@ import {
 import {
   BRIDGE_FEE_BPS_DENOMINATOR,
   DEFAULT_BRIDGE_FEE_BPS,
-  DEFAULT_BRIDGE_FEE_RECIPIENT_SOLANA,
-  DEFAULT_BRIDGE_FEE_RECIPIENT_NARA,
 } from "./constants";
 import { sendTx } from "./tx";
 
@@ -60,37 +58,36 @@ export interface BridgeTokenConfig {
 export interface BridgeTransferParams {
   /** Token symbol from BRIDGE_TOKENS (e.g. "USDC", "SOL") */
   token: string;
-  /** Source chain — fee is deducted on this chain in the source token */
+  /** Source chain */
   fromChain: BridgeChain;
   /** Sender pubkey on the source chain */
   sender: PublicKey;
   /** Recipient pubkey on the destination chain */
   recipient: PublicKey;
-  /** Gross amount (raw units, source-chain decimals). Fee is deducted from this. */
+  /**
+   * Amount to send (raw units, source-chain decimals). This leaves the sender
+   * in full; the destination warp route deducts the bridge fee on release.
+   */
   amount: bigint;
-  /** Optional fee bps override (defaults to BRIDGE_FEE_BPS) */
-  feeBps?: number;
-  /** Optional fee recipient override (defaults to BRIDGE_FEE_RECIPIENT) */
-  feeRecipient?: PublicKey;
-  /** Skip fee deduction entirely */
-  skipFee?: boolean;
 }
 
 export interface BridgeIxsResult {
-  /** All instructions in order: [feeIx?, atapayerIx?, transferRemoteIx] */
+  /** The transferRemote instruction */
   instructions: TransactionInstruction[];
   /** Extra signer required by the transferRemote ix (the unique message keypair) */
   uniqueMessageKeypair: Keypair;
-  /** Fee deducted in source token raw units */
+  /** Fee the destination route will deduct on release, in raw units */
   feeAmount: bigint;
-  /** Net amount actually bridged */
+  /** Amount the recipient will receive after that deduction */
   bridgeAmount: bigint;
 }
 
 export interface BridgeTransferResult {
   signature: string;
   messageId: string | null;
+  /** Fee the destination route will deduct on release, in raw units */
   feeAmount: bigint;
+  /** Amount the recipient will receive after that deduction */
   bridgeAmount: bigint;
 }
 
@@ -194,40 +191,6 @@ function getToken(symbol: string): BridgeTokenConfig {
   const t = BRIDGE_TOKENS[symbol];
   if (!t) throw new Error(`Unknown bridge token: ${symbol}`);
   return t;
-}
-
-// ─── Fee recipient (runtime override, per chain) ──────────────────
-
-const _feeRecipientOverrides: Record<BridgeChain, PublicKey | null> = {
-  solana: null,
-  nara: null,
-};
-
-/**
- * Override the bridge fee recipient for a specific source chain at runtime.
- * Pass `null` as recipient to clear the override and fall back to the default.
- */
-export function setBridgeFeeRecipient(
-  chain: BridgeChain,
-  recipient: PublicKey | string | null
-): void {
-  if (recipient === null) {
-    _feeRecipientOverrides[chain] = null;
-    return;
-  }
-  _feeRecipientOverrides[chain] =
-    typeof recipient === "string" ? new PublicKey(recipient) : recipient;
-}
-
-/** Get the current fee recipient for a source chain (override or default). */
-export function getBridgeFeeRecipient(chain: BridgeChain): PublicKey {
-  const override = _feeRecipientOverrides[chain];
-  if (override) return override;
-  const defaultAddr =
-    chain === "solana"
-      ? DEFAULT_BRIDGE_FEE_RECIPIENT_SOLANA
-      : DEFAULT_BRIDGE_FEE_RECIPIENT_NARA;
-  return new PublicKey(defaultAddr);
 }
 
 // ─── PDA derivation ───────────────────────────────────────────────
@@ -342,7 +305,11 @@ export interface FeeSplit {
 }
 
 /**
- * Calculate the bridge fee: max(amount * bps / 10000, minFee)
+ * Calculate the bridge fee: max(amount * bps / 10000, minFee).
+ *
+ * Mirrors the formula the destination warp route applies on release, so this
+ * is what the recipient ends up with. `getBridgeFeeConfig` reads the live
+ * parameters from the destination chain if you need to confirm them.
  */
 export function calculateBridgeFee(
   amount: bigint,
@@ -359,77 +326,52 @@ export function calculateBridgeFee(
   return { feeAmount, bridgeAmount, feeBps: bps, minFee };
 }
 
-// ─── Fee instruction builder ──────────────────────────────────────
+// ─── On-chain fee (charged by the destination warp route) ─────────
+
+/** PDA holding a warp route's on-chain fee config. */
+export function deriveFeeConfigPda(warpProgram: PublicKey): PublicKey {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("hyperlane_token"), Buffer.from("-"), Buffer.from("fee_config")],
+    warpProgram
+  )[0];
+}
+
+export interface BridgeFeeConfig {
+  /** Proportional fee in basis points */
+  feeBps: number;
+  /** Minimum fee in destination-token raw units */
+  feeFloor: bigint;
+  /** Added when the recipient's token account has to be created */
+  feeAtaSurcharge: bigint;
+  /** Maximum fee; 0n means unbounded */
+  feeCap: bigint;
+}
 
 /**
- * Build the fee-collection instructions on the source chain in the source token.
+ * Read the fee parameters the destination warp route will apply on release.
  *
- * For SPL tokens: returns [createIdempotentATA(feeRecipient), transferChecked].
- * For native SOL on Solana: returns [SystemProgram.transfer].
- *
- * Returns empty array if feeAmount == 0.
+ * `destConnection` must point at the DESTINATION chain (the opposite of
+ * `fromChain`). Returns null when that route charges nothing — either its fee
+ * config has not been initialized, or that side has no on-chain fee support.
  */
-export function makeBridgeFeeIxs(params: {
-  token: string;
-  fromChain: BridgeChain;
-  sender: PublicKey;
-  feeRecipient: PublicKey;
-  feeAmount: bigint;
-}): TransactionInstruction[] {
-  const { token, fromChain, sender, feeRecipient, feeAmount } = params;
-  if (feeAmount === 0n) return [];
-
-  const tokenCfg = getToken(token);
-  const side = tokenCfg[fromChain];
-
-  // Native SOL → SystemProgram.transfer
-  if (side.mode === "native") {
-    return [
-      SystemProgram.transfer({
-        fromPubkey: sender,
-        toPubkey: feeRecipient,
-        lamports: feeAmount,
-      }),
-    ];
-  }
-
-  // SPL token (collateral or synthetic) → ensure recipient ATA + transferChecked
-  if (!side.mint || !side.tokenProgram) {
-    throw new Error(`Token ${token} on ${fromChain} missing mint/tokenProgram`);
-  }
-
-  const senderAta = getAssociatedTokenAddressSync(
-    side.mint,
-    sender,
-    false,
-    side.tokenProgram
+export async function getBridgeFeeConfig(
+  destConnection: Connection,
+  token: string,
+  toChain: BridgeChain
+): Promise<BridgeFeeConfig | null> {
+  const side = getToken(token)[toChain];
+  const info = await destConnection.getAccountInfo(
+    deriveFeeConfigPda(side.warpProgram)
   );
-  const recipientAta = getAssociatedTokenAddressSync(
-    side.mint,
-    feeRecipient,
-    true, // allowOwnerOffCurve — fee recipient may be a PDA
-    side.tokenProgram
-  );
-
-  return [
-    createAssociatedTokenAccountIdempotentInstruction(
-      sender,
-      recipientAta,
-      feeRecipient,
-      side.mint,
-      side.tokenProgram
-    ),
-    createTransferCheckedInstruction(
-      senderAta,
-      side.mint,
-      recipientAta,
-      sender,
-      feeAmount,
-      tokenCfg.decimals,
-      [],
-      side.tokenProgram
-    ),
-  ];
+  // 1-byte init flag, bump, fee_collector_bump, then the params.
+  if (!info || info.data.length < 29 || info.data[0] === 0) return null;
+  const d = info.data;
+  return {
+    feeBps: d.readUInt16LE(3),
+    feeFloor: d.readBigUInt64LE(5),
+    feeAtaSurcharge: d.readBigUInt64LE(13),
+    feeCap: d.readBigUInt64LE(21),
+  };
 }
 
 // ─── TransferRemote instruction builder ───────────────────────────
@@ -528,21 +470,14 @@ export function makeTransferRemoteIx(params: {
 // ─── High-level: build full bridge instruction set ────────────────
 
 /**
- * Build all instructions needed to bridge tokens cross-chain with in-tx fee.
- * Returns the instructions, the unique-message keypair (must sign the tx),
- * and the fee/bridge amounts.
+ * Build the instructions needed to bridge tokens cross-chain.
+ *
+ * The full `amount` is dispatched; the destination warp route deducts the fee
+ * as it releases the tokens. `feeAmount` and `bridgeAmount` in the result are
+ * that deduction and what the recipient ends up with.
  */
 export function makeBridgeIxs(params: BridgeTransferParams): BridgeIxsResult {
-  const {
-    token,
-    fromChain,
-    sender,
-    recipient,
-    amount,
-    feeBps,
-    feeRecipient,
-    skipFee,
-  } = params;
+  const { token, fromChain, sender, recipient, amount } = params;
 
   if (amount <= 0n) throw new Error("amount must be > 0");
 
@@ -555,22 +490,10 @@ export function makeBridgeIxs(params: BridgeTransferParams): BridgeIxsResult {
     );
   }
 
-  const split = skipFee
-    ? { feeAmount: 0n, bridgeAmount: amount, feeBps: 0, minFee: 0n }
-    : calculateBridgeFee(amount, feeBps, tokenCfg.minFee);
-
+  const split = calculateBridgeFee(amount, undefined, tokenCfg.minFee);
   if (split.bridgeAmount <= 0n) {
-    throw new Error("bridge amount after fee is zero — increase amount or lower fee");
+    throw new Error("bridge amount after fee is zero — increase amount");
   }
-
-  const recipientForFee = feeRecipient ?? getBridgeFeeRecipient(fromChain);
-  const feeIxs = makeBridgeFeeIxs({
-    token,
-    fromChain,
-    sender,
-    feeRecipient: recipientForFee,
-    feeAmount: split.feeAmount,
-  });
 
   const uniqueMessageKeypair = Keypair.generate();
   const transferIx = makeTransferRemoteIx({
@@ -578,12 +501,12 @@ export function makeBridgeIxs(params: BridgeTransferParams): BridgeIxsResult {
     fromChain,
     sender,
     recipient,
-    amount: split.bridgeAmount,
+    amount,
     uniqueMessageKeypair,
   });
 
   return {
-    instructions: [...feeIxs, transferIx],
+    instructions: [transferIx],
     uniqueMessageKeypair,
     feeAmount: split.feeAmount,
     bridgeAmount: split.bridgeAmount,

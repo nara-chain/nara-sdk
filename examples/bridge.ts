@@ -25,7 +25,7 @@ import {
   BRIDGE_TOKENS,
   setAltAddress,
   DEFAULT_BRIDGE_FEE_BPS,
-  getBridgeFeeRecipient,
+  getBridgeFeeConfig,
   type BridgeChain,
   type BridgeTokenConfig,
 } from "../index";
@@ -124,7 +124,8 @@ async function main() {
   console.log(`From side mode: ${tokenCfg[fromChain].mode}`);
   console.log(`To side mode:   ${tokenCfg[toChain].mode}`);
   console.log(`Fee BPS:        ${DEFAULT_BRIDGE_FEE_BPS} (${DEFAULT_BRIDGE_FEE_BPS / 100}%)`);
-  console.log(`Fee recipient:  ${getBridgeFeeRecipient(fromChain).toBase58()}`);
+  const onchainFee = await getBridgeFeeConfig(destConn, tokenArg, toChain);
+  console.log(`Dest fee config: ${onchainFee ? `${onchainFee.feeBps / 100}%, floor ${onchainFee.feeFloor}` : "not initialized (route charges nothing yet)"}`);
   console.log();
 
   // --- Step 1: source balance ---
